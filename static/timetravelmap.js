@@ -49,7 +49,7 @@ document.addEventListener('DOMContentLoaded', function () {
         "https://maps.ottawa.ca/arcgis/rest/services/Basemap_Imagery_2022/MapServer",
     ];
 
-    var sliderValues = ["Today", 2022, 2002, 1976, 1965, 1958, 1928];
+    var sliderValues = [2022, 2002, 1976, 1965, 1958, 1928];
     
     for (var i = 0; i < layerUrls.length; i++) {
         var currentUrl = layerUrls[i];
@@ -81,7 +81,7 @@ document.addEventListener('DOMContentLoaded', function () {
     layers[range.value].setOpacity(1.0);
   
     // set this attribute so CSS can scale the values of the slider
-    document.documentElement.style.setProperty('--number-of-values', sliderValues.length);
+    document.documentElement.style.setProperty('--number-of-values', sliderValues.length-1);
 
  
     // Populate values container with evenly distributed values
@@ -118,8 +118,6 @@ document.addEventListener('DOMContentLoaded', function () {
       layer1_opacity = 1.0 - layer2_opacity;
       layers[layer1_idx].setOpacity(layer1_opacity);
       layers[layer2_idx].setOpacity(layer2_opacity);
-
-      console.log(this.value + " pos " + pos +  " idx " + layer1_idx + ":" + layer1_opacity + " idx " + layer2_idx + ":" + layer2_opacity);
 
 
     });

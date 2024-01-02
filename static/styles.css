@@ -55,13 +55,16 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    color: #333;
+    color: white;
   }
   
-  .slider-values span {
-    margin: 5px 0;
-    height: calc(1000px / var(--number-of-values));
-  }
+.slider-values span {
+  margin: 0px 0;
+  height: calc(1000px / var(--number-of-values));
+  font-weight: bold; /* Make the text thicker */
+  text-shadow: -1px -1px 0 black, 1px -1px 0 black, -1px 1px 0 black, 1px 1px 0 black; /* Black outline effect */
+
+}
   
   
   
