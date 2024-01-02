@@ -4,14 +4,18 @@
     box-sizing: border-box;
   }
   
-  body {
+  body, html {
+    margin: 0;
+    padding: 0;
+    height: 100%;
     font-family: sans-serif;
-    padding: 40px;
+    padding: 0px;
   }
-  
-  
+
+   
   #map {
     height: 100vh;
+    width: 100vw;
     position: relative;
     z-index: 1; /* Ensure the map is behind other elements */
   }
@@ -22,36 +26,35 @@
 .range-slider {
     position: absolute;
     z-index: 2;
-    top: 150px; /* Adjust the top position based on your needs */
-    left: 10px; /* Adjust the left position based on your needs */
+    top: 200px; /* Adjust the top position based on your needs */
+    right: 20px; /* Adjust the left position based on your needs */
   }
   
-  /* Slider */
-  .input-range {
-    -webkit-appearance: none;
-    height: 1000px;
-    border-radius: 5px;
+/* Slider */
+.input-range {
+  -webkit-appearance: none;
+  height: 70vh;
+  border-radius: 5px;
+  background: #ccc;
+  outline: none;
+  writing-mode: bt-lr; /* IE */
+  -webkit-appearance: slider-vertical; /* WebKit */
+}
+
+::-moz-range-track {
     background: #ccc;
-    outline: none;
-    writing-mode: bt-lr; /* IE */
-    -webkit-appearance: slider-vertical; /* WebKit */
-  }
+    border: 0;
+}
+
+input::-moz-focus-inner { 
+  border: 0; 
+}
   
-  ::-moz-range-track {
-      background: #ccc;
-      border: 0;
-  }
-  
-  input::-moz-focus-inner { 
-    border: 0; 
-  }
-  
-/* Add this style to your CSS */
 .slider-values {
     position: absolute;
     z-index: 2;
-    top: 150px; /* Adjust the top position based on your needs */
-    left: 100px; /* Adjust the left position based on your needs */
+    top: 200px; /* Adjust the top position based on your needs */
+    right: 50px; /* Adjust the left position based on your needs */
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -60,7 +63,7 @@
   
 .slider-values span {
   margin: 0px 0;
-  height: calc(1000px / var(--number-of-values));
+  height: calc(var(--slider-height) / var(--number-of-values));
   font-weight: bold; /* Make the text thicker */
   text-shadow: -1px -1px 0 black, 1px -1px 0 black, -1px 1px 0 black, 1px 1px 0 black; /* Black outline effect */
 

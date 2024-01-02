@@ -23,9 +23,7 @@ L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
 
 
 
-document.addEventListener('DOMContentLoaded', function () {
-
-
+window.addEventListener('load', function() {
     // setup all tile layers
     var mapMinZoom = 12;
     var mapMaxZoom = 16;
@@ -82,6 +80,9 @@ document.addEventListener('DOMContentLoaded', function () {
   
     // set this attribute so CSS can scale the values of the slider
     document.documentElement.style.setProperty('--number-of-values', sliderValues.length-1);
+    var height = Math.round(range.getBoundingClientRect().height);
+    var heightString = height + 'px';
+    document.documentElement.style.setProperty('--slider-height', heightString);
 
  
     // Populate values container with evenly distributed values
@@ -121,7 +122,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
 
     });
-  });
+});
 
 
 
