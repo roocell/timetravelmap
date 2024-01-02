@@ -2,18 +2,25 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Leaflet KML Example</title>
+  <title>time travel map</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <link rel="stylesheet" href="static/styles.css" />
 </head>
 
 <body>
-    <div id="map" style="height: 1000px;"></div>
-    <div id="opacitySlider"></div>
-  
+    <div id="map"></div>
+    <div class="range-slider">
+        <input class="input-range" orient="vertical" type="range">
+    </div> 
+    <div class="slider-values"></div>
+
     <!-- Leaflet Omnivore is for KML files -->
     <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
     <script src="https://unpkg.com/leaflet-omnivore/leaflet-omnivore.min.js"></script>
+    <!-- esri leaflet to use arcgis tiles -->
+    <script src="https://unpkg.com/esri-leaflet@3.0.10/dist/esri-leaflet.js"></script>
+
     <script src="static/timetravelmap.js"></script>
 </body>
 </html>
