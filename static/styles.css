@@ -26,14 +26,14 @@
 .range-slider {
     position: absolute;
     z-index: 2;
-    top: 200px; /* Adjust the top position based on your needs */
-    right: 20px; /* Adjust the left position based on your needs */
+    top: 20vh; /* half of 100-60vh of .input-range */
+    right: 0px; /* Adjust the left position based on your needs */
   }
   
 /* Slider */
 .input-range {
   -webkit-appearance: none;
-  height: 70vh;
+  height: 60vh;
   border-radius: 5px;
   background: #ccc;
   outline: none;
@@ -53,8 +53,8 @@ input::-moz-focus-inner {
 .slider-values {
     position: absolute;
     z-index: 2;
-    top: 200px; /* Adjust the top position based on your needs */
-    right: 50px; /* Adjust the left position based on your needs */
+    top: 20vh; /* half of 100-60vh of .input-range */
+    right: 20px; /* Adjust the left position based on your needs */
     display: flex;
     flex-direction: column;
     align-items: center;

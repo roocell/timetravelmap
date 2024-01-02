@@ -4,9 +4,35 @@ var map = L.map('map').setView([45.39793819727917, -75.72070285499208], 100.0);
 var layers = []; // all the tile layers
 
 // Add a base layer (optional)
-// L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-//     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-// }).addTo(map);
+L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+}).addTo(map);
+
+
+var layerUrls = [
+    "https://maps.ottawa.ca/arcgis/rest/services/Basemap_Imagery_1928/MapServer",
+    "static/data/1933/{z}/{x}/{y}.png",
+    "static/data/1945/{z}/{x}/{y}.png",
+    "static/data/1954/{z}/{x}/{y}.png",
+    "https://maps.ottawa.ca/arcgis/rest/services/Basemap_Imagery_1958/MapServer",
+    "https://maps.ottawa.ca/arcgis/rest/services/Basemap_Imagery_1965/MapServer",
+    "https://maps.ottawa.ca/arcgis/rest/services/Basemap_Imagery_1976/MapServer",
+    "https://maps.ottawa.ca/arcgis/rest/services/Basemap_Imagery_2002/MapServer",
+    "https://maps.ottawa.ca/arcgis/rest/services/Basemap_Imagery_2022/MapServer",
+];
+var sliderValues = [2022, 2002, 1976, 1965, 1958, 1954, 1945, 1933, 1928];
+var start_layer_index = 3; // 1954
+
+
+
+map.refresh = function(timeout, zoom){
+    window.setTimeout(function(){
+        console.log("map timeout")
+        // this fixes inital ESRI tile load
+        map.setZoom(zoom);
+    }, timeout);
+};
+map.refresh(500, 13);
 
 // maptiler non-commerical only allows zoom level 12-16
 // which is not very good since we can't zoom in.
@@ -19,63 +45,61 @@ var layers = []; // all the tile layers
 
 // TODO: chatGPT says GDAL with Python can be used as an alternative to generate tiles
 
+function addLayerToMap(layer_index)
+{
+    if (typeof layers[layer_index] === 'undefined')
+    {
+        if (layerUrls[layer_index].includes("static"))
+        {
+            // local tiles
+            var mapMinZoom = 5;
+            var mapMaxZoom = 15;
+            var layer;
+            var options = {
+                minNativeZoom: mapMinZoom,
+                maxNativeZoom: mapMaxZoom,
+                minZoom: 0,
+                maxZoom: 22,
+                opacity: 0.0,
+                attribution: 'rendered with QGIS',
+                tms: false
+            };
+            layers[layer_index] = L.tileLayer(layerUrls[layer_index], options).addTo(map);
+        } else {
+            // city of ottawa source
+            layers[layer_index] = L.esri.tiledMapLayer({
+                url: layerUrls[layer_index],
+                pane: "overlayPane",
+                opacity: 0.0, // make all hidden
+                maxNativeZoom: 18, // zoom capability of tiles
+                maxZoom: 22 // zoom on map (will stretch tiles)
+            }).addTo(map);
 
+            // TODO: everytime we load an ESRI map 
+            // we have to zoom to have it appear.
+            map.refresh(500, map.getZoom()+1);
+        }
 
-
-
-window.addEventListener('load', function() {
-    // setup all tile layers
-    var mapMinZoom = 12;
-    var mapMaxZoom = 20;
-    var layer;
-    var options = {
-        minZoom: mapMinZoom,
-        maxZoom: mapMaxZoom,
-        opacity: 1.0,
-        attribution: '<a href="https://www.maptiler.com/engine/">Rendered with MapTiler Engine</a>, non-commercial use only',
-        tms: false
-    };
-    //layer = L.tileLayer('static/data/54-4518-0015-0080-json/{z}/{x}/{y}.png', options).addTo(map);
-    map.setZoom(0); // start way out (to prevent so many 404s at startup)
-    
-    var layerUrls = [
-        "https://maps.ottawa.ca/arcgis/rest/services/Basemap_Imagery_1928/MapServer",
-        "https://maps.ottawa.ca/arcgis/rest/services/Basemap_Imagery_1958/MapServer",
-        "https://maps.ottawa.ca/arcgis/rest/services/Basemap_Imagery_1965/MapServer",
-        "https://maps.ottawa.ca/arcgis/rest/services/Basemap_Imagery_1976/MapServer",
-        "https://maps.ottawa.ca/arcgis/rest/services/Basemap_Imagery_2002/MapServer",
-        "https://maps.ottawa.ca/arcgis/rest/services/Basemap_Imagery_2022/MapServer",
-    ];
-
-    var sliderValues = [2022, 2002, 1976, 1965, 1958, 1928];
-    
-    for (var i = 0; i < layerUrls.length; i++) {
-        var currentUrl = layerUrls[i];
-        console.log("Current URL:", currentUrl);
-    
-    
-        layers[i] = L.esri.tiledMapLayer({
-            url: currentUrl,
-            pane: "overlayPane",
-            opacity: 0.0, // make all hidden
-            maxNativeZoom: 18, // zoom capability of tiles
-            maxZoom: 22 // zoom on map (will stretch tiles)
-        }).addTo(map);
-  
-        layers[i].on('tileerror', function (error) {
+        layers[layer_index].on('tileerror', function (error) {
             //console.warn('Tile error:', error);
             //error.preventDefault();
-          });
+        });
     }
+}
+
+window.addEventListener('load', function() {
+    map.setZoom(0); // start way out (to prevent so many 404s at startup)
+    
+    addLayerToMap(start_layer_index);
     
     var range = document.querySelector('.input-range');
     var valuesContainer = document.querySelector('.slider-values');
 
     // range is size of the number of layers we have
     range.min = 0.0;
-    range.max = 5.0;
+    range.max = layerUrls.length;
     range.step = "any";
-    range.value = 2; // init to 1965 (see below)
+    range.value = start_layer_index;
 
     // make 1965 full opacity
     layers[range.value].setOpacity(1.0);
@@ -102,17 +126,21 @@ window.addEventListener('load', function() {
       var layer1_idx = Math.floor(this.value);
       var layer2_idx = layer1_idx + 1;
 
+      addLayerToMap(layer1_idx);
+      addLayerToMap(layer2_idx);
+
       // make sure all others are zero
       // (in case slider moves fast)
       for (var i = 0; i < layerUrls.length; i++) {
         if (i == layer1_idx || i == layer2_idx) continue;
+        if (typeof layers[i] === 'undefined') continue;
         layers[i].setOpacity(0.0);
       }
 
-      if (layer2_idx >= layers.length)
+      if (layer2_idx >= layerUrls.length)
       {
         // at the top of the slider - display base map
-        layers[layers.length-1].setOpacity(0.0);
+        layers[layerUrls.length-1].setOpacity(0.0);
         return;
       }
 
@@ -122,6 +150,7 @@ window.addEventListener('load', function() {
       layers[layer1_idx].setOpacity(layer1_opacity);
       layers[layer2_idx].setOpacity(layer2_opacity);
 
+      console.log(layer1_idx + ":" + layer1_opacity + " " + layer2_idx + ":" + layer2_opacity)
 
     });
 });
@@ -146,8 +175,6 @@ function onMapClick(e) {
     // You can customize the marker popup or other properties here
     marker.bindPopup(lat + ", " + lng).openPopup();
 }
-
-// Attach the click event handler to the map
 map.on('click', onMapClick);
 
 
@@ -155,49 +182,18 @@ map.on('click', onMapClick);
 var callBack = function () {
     console.log("Map successfully loaded");
 };
-
 map.whenReady(callBack);
 
 
 function onZoom() {
     var currentZoom = map.getZoom();
-    console.log('Map zoomed to level:', currentZoom);
-    // Add your custom logic or actions here
+    //console.log('Map zoomed to level:', currentZoom);
 }
-
-// Listen for the 'zoom' event on the map
 map.on('zoom', onZoom);
 
 
 map.on('error', function (error) {
     console.warn('map error:', error);
-  });
+});
 
 
-map.refresh = function(timeout){
-    window.setTimeout(function(){
-        console.log("map timeout")
-        // this fixes inital ESRI tile load
-        map.setZoom(15);
-    }, timeout);
-};
-map.refresh(500);
-
-// Store the original fetch function
-var originalFetch = window.fetch;
-
-// Override window.fetch to capture 404 errors
-window.fetch = function(url, options) {
-  return originalFetch(url, options).then(function(response) {
-    // Check if the response has a 404 status
-    if (response.status === 404) {
-      console.log('Captured 404 error for:', url);
-      // Handle the 404 error as needed
-    }
-    return response;
-  }).catch(function(error) {
-    // Handle fetch errors
-    console.error('Fetch error:', error);
-    throw error;
-  });
-};
