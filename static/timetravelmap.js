@@ -38,6 +38,7 @@ window.addEventListener('load', function() {
     //layer = L.tileLayer('static/data/54-4518-0015-0080-json/{z}/{x}/{y}.png', options).addTo(map);
     map.setZoom(13);
     
+    
     var layerUrls = [
         "https://maps.ottawa.ca/arcgis/rest/services/Basemap_Imagery_1928/MapServer",
         "https://maps.ottawa.ca/arcgis/rest/services/Basemap_Imagery_1958/MapServer",
@@ -61,7 +62,7 @@ window.addEventListener('load', function() {
         }).addTo(map);
   
         layers[i].on('tileerror', function (error) {
-            console.warn('Tile error:', error);
+            //console.warn('Tile error:', error);
             //error.preventDefault();
           });
     }
@@ -148,10 +149,40 @@ function onMapClick(e) {
 // Attach the click event handler to the map
 map.on('click', onMapClick);
 
+
+
+var callBack = function () {
+    console.log("Map successfully loaded");
+};
+
+map.whenReady(callBack);
+
+
+function onZoom() {
+    var currentZoom = map.getZoom();
+    console.log('Map zoomed to level:', currentZoom);
+    // Add your custom logic or actions here
+}
+
+// Listen for the 'zoom' event on the map
+map.on('zoom', onZoom);
+
+
 map.on('error', function (error) {
     console.warn('map error:', error);
   });
 
+
+map.refresh = function(timeout){
+    window.setTimeout(function(){
+        console.log("map timeout")
+        // this fixes inital ESRI tile load
+        map.setZoom(map.getZoom()+1);
+    }, timeout);
+};
+map.refresh(500);
+
+// this doesn't seem to work
 var consoleerror = console.error;
 console.error = function (err) {
     console.log("mike")
