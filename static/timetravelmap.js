@@ -4,9 +4,9 @@ var map = L.map('map').setView([45.39793819727917, -75.72070285499208], 100.0);
 var layers = []; // all the tile layers
 
 // Add a base layer (optional)
-L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-}).addTo(map);
+// L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+//     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+// }).addTo(map);
 
 // maptiler non-commerical only allows zoom level 12-16
 // which is not very good since we can't zoom in.
@@ -26,7 +26,7 @@ L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
 window.addEventListener('load', function() {
     // setup all tile layers
     var mapMinZoom = 12;
-    var mapMaxZoom = 16;
+    var mapMaxZoom = 20;
     var layer;
     var options = {
         minZoom: mapMinZoom,
@@ -36,8 +36,7 @@ window.addEventListener('load', function() {
         tms: false
     };
     //layer = L.tileLayer('static/data/54-4518-0015-0080-json/{z}/{x}/{y}.png', options).addTo(map);
-    map.setZoom(13);
-    
+    map.setZoom(0); // start way out (to prevent so many 404s at startup)
     
     var layerUrls = [
         "https://maps.ottawa.ca/arcgis/rest/services/Basemap_Imagery_1928/MapServer",
@@ -58,7 +57,9 @@ window.addEventListener('load', function() {
         layers[i] = L.esri.tiledMapLayer({
             url: currentUrl,
             pane: "overlayPane",
-            opacity: 0.0 // make all hidden
+            opacity: 0.0, // make all hidden
+            maxNativeZoom: 18, // zoom capability of tiles
+            maxZoom: 22 // zoom on map (will stretch tiles)
         }).addTo(map);
   
         layers[i].on('tileerror', function (error) {
@@ -177,18 +178,26 @@ map.refresh = function(timeout){
     window.setTimeout(function(){
         console.log("map timeout")
         // this fixes inital ESRI tile load
-        map.setZoom(map.getZoom()+1);
+        map.setZoom(15);
     }, timeout);
 };
 map.refresh(500);
 
-// this doesn't seem to work
-var consoleerror = console.error;
-console.error = function (err) {
-    console.log("mike")
-    if (typeof (err.stack) != 'undefined' && err.stack.includes('at Actor.receive (https://maps.ottawa.ca/')) {
-        return;
-    } else {
-        consoleerror(err);
+// Store the original fetch function
+var originalFetch = window.fetch;
+
+// Override window.fetch to capture 404 errors
+window.fetch = function(url, options) {
+  return originalFetch(url, options).then(function(response) {
+    // Check if the response has a 404 status
+    if (response.status === 404) {
+      console.log('Captured 404 error for:', url);
+      // Handle the 404 error as needed
     }
-}
+    return response;
+  }).catch(function(error) {
+    // Handle fetch errors
+    console.error('Fetch error:', error);
+    throw error;
+  });
+};
