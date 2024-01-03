@@ -4,9 +4,9 @@ var map = L.map('map').setView([45.39793819727917, -75.72070285499208], 100.0);
 var layers = []; // all the tile layers
 
 // Add a base layer (optional)
-L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-}).addTo(map);
+// L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+//     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+// }).addTo(map);
 
 
 var layerUrls = [
@@ -20,7 +20,17 @@ var layerUrls = [
     "https://maps.ottawa.ca/arcgis/rest/services/Basemap_Imagery_2002/MapServer",
     "https://maps.ottawa.ca/arcgis/rest/services/Basemap_Imagery_2022/MapServer",
 ];
-var sliderValues = [2022, 2002, 1976, 1965, 1958, 1954, 1945, 1933, 1928];
+var sliderValues = [
+    2022,
+    2002,
+    1976,
+    1965,
+    1958,
+    1954,
+    1945,
+    1933,
+    1928
+];
 var start_layer_index = 3; // 1954
 
 
@@ -88,7 +98,7 @@ function addLayerToMap(layer_index)
 }
 
 window.addEventListener('load', function() {
-    map.setZoom(0); // start way out (to prevent so many 404s at startup)
+    map.setZoom(12); // start way out (to prevent so many 404s at startup)
     
     addLayerToMap(start_layer_index);
     
