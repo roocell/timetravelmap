@@ -4,13 +4,14 @@ var map = L.map('map').setView([45.39793819727917, -75.72070285499208], 100.0);
 var layers = []; // all the tile layers
 
 // Add a base layer (optional)
-// L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-//     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-// }).addTo(map);
+L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+}).addTo(map);
 
 
 var layerUrls = [
-    "https://maps.ottawa.ca/arcgis/rest/services/Basemap_Imagery_1928/MapServer",
+    //"https://maps.ottawa.ca/arcgis/rest/services/Basemap_Imagery_1928/MapServer",
+    "static/data/1928_esri",
     "static/data/1933/{z}/{x}/{y}.png",
     "static/data/1945/{z}/{x}/{y}.png",
     "static/data/1954/{z}/{x}/{y}.png",
@@ -47,28 +48,26 @@ map.refresh(500, 13);
 // maptiler non-commerical only allows zoom level 12-16
 // which is not very good since we can't zoom in.
 
-// also appears that 1954 imagery is distorted - probably why geoOttawa hasn't used them.
-// perhaps it's just a zoom level issue. i picked coordinates very close together
-// TODO: try exporting with far coordinates in maptiler
-
 // TODO: use the $89/mth maptiler account to export with custom zoom levels
-
 // TODO: chatGPT says GDAL with Python can be used as an alternative to generate tiles
+// QGIS seems to be the answer.
 
 function addLayerToMap(layer_index)
 {
     if (typeof layers[layer_index] === 'undefined')
     {
-        if (layerUrls[layer_index].includes("static"))
+        if (layerUrls[layer_index].includes("static") && !layerUrls[layer_index].includes("esri"))
         {
+            console.log("TILES adding " + layerUrls[layer_index]);
             // local tiles
+            // NOTE: if the generated tiles aren't generated to mapMaxZoom - they will go blank
             var mapMinZoom = 5;
-            var mapMaxZoom = 15;
+            var mapMaxZoom = 18;
             var layer;
             var options = {
                 minNativeZoom: mapMinZoom,
                 maxNativeZoom: mapMaxZoom,
-                minZoom: 0,
+                minZoom: 5,
                 maxZoom: 22,
                 opacity: 0.0,
                 attribution: 'rendered with QGIS',
@@ -77,6 +76,7 @@ function addLayerToMap(layer_index)
             layers[layer_index] = L.tileLayer(layerUrls[layer_index], options).addTo(map);
         } else {
             // city of ottawa source
+            console.log("ESRI TILES adding " + layerUrls[layer_index]);
             layers[layer_index] = L.esri.tiledMapLayer({
                 url: layerUrls[layer_index],
                 pane: "overlayPane",
@@ -87,6 +87,7 @@ function addLayerToMap(layer_index)
 
             // TODO: everytime we load an ESRI map 
             // we have to zoom to have it appear.
+            // serving tiles locally doesn't seem to have this issue
             map.refresh(500, map.getZoom()+1);
         }
 
