@@ -8,7 +8,6 @@ L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
 }).addTo(map);
 
-
 var layerUrls = [
     //"https://maps.ottawa.ca/arcgis/rest/services/Basemap_Imagery_1928/MapServer",
     "static/data/1928_esri",
@@ -32,7 +31,7 @@ var sliderValues = [
     1933,
     1928
 ];
-var start_layer_index = 3; // 1954
+var start_layer_index = 0; // 1954
 
 
 
@@ -88,7 +87,10 @@ function addLayerToMap(layer_index)
             // TODO: everytime we load an ESRI map 
             // we have to zoom to have it appear.
             // serving tiles locally doesn't seem to have this issue
-            map.refresh(500, map.getZoom()+1);
+            if(!layerUrls[layer_index].includes("esri"))
+            {
+                map.refresh(500, map.getZoom()+1);
+            }
         }
 
         layers[layer_index].on('tileerror', function (error) {
@@ -97,6 +99,16 @@ function addLayerToMap(layer_index)
         });
     }
 }
+
+function removeLayerToMap(layer_index)
+{
+    // TODO: should probably remove layers from the map
+    // as the date is moved. that way - we won't be downloading tiles from every 
+    // year when panning/zooming.
+    // although...the upside to loading everything is that you can swipe
+    // through the years very smoothly without loading tiles.
+}
+
 
 window.addEventListener('load', function() {
     map.setZoom(12); // start way out (to prevent so many 404s at startup)
@@ -161,7 +173,7 @@ window.addEventListener('load', function() {
       layers[layer1_idx].setOpacity(layer1_opacity);
       layers[layer2_idx].setOpacity(layer2_opacity);
 
-      console.log(layer1_idx + ":" + layer1_opacity + " " + layer2_idx + ":" + layer2_opacity)
+      //console.log(layer1_idx + ":" + layer1_opacity + " " + layer2_idx + ":" + layer2_opacity)
 
     });
 });
