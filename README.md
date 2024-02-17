@@ -37,9 +37,14 @@ Repeat for all images, all years.
   * click on gear icon, search "xyz"
   * choose Generate XYZ Tiles Directory
     * for extent size view window as you like, click the button
-    * minzoom=5, maxzoom=15  (kind of depends on the resolution of the images how far you want to zoom)
-    * set output directory (near bottom) to timetravelmap/static/data/<year>
-    * copy to webserver
+    * minzoom=5, maxzoom=18  (kind of depends on the resolution of the images how far you want to zoom)
+    * remove local  timetravelmap/static/data/\<year\>/*
+    * set output directory (near bottom) to timetravelmap/static/data/\<year\>
+    * generate
+    * zip up \<year\>/* to local zip
+    * rm timetravelmap/static/data/\<year\>/* on server
+    * copy zip over to timetravelmap/static/data/\<year\>
+    * unzip on server
 
 This will also produce the tiles and even an HTML file you can try out. (html file is also in log file)
 
