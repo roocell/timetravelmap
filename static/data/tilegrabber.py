@@ -15,16 +15,16 @@ sleep_time = 0.1
 # run in windows powershell
 # python.exe tilegrabber | Tee-Object -FilePath output.txt
 
-url_pattern = "https://maps.ottawa.ca/arcgis/rest/services/Basemap_Imagery_1928/MapServer/tile/{z}/{y}/{x}"
-output_dir = "1928_esri"
-# 45.36842857439341, -75.76498031616212   (bottom left)
-# 45.47541990014997, -75.56705474853517   (top right)
-min_latitude = 45.36842857439341
-max_latitude = 45.47541990014997
-min_longitude = -75.76498031616212
-max_longitude = -75.56705474853517
-min_zoom_level = 13
-max_zoom_level = 18
+# url_pattern = "https://maps.ottawa.ca/arcgis/rest/services/Basemap_Imagery_1928/MapServer/tile/{z}/{y}/{x}"
+# output_dir = "1928_esri"
+# # 45.36842857439341, -75.76498031616212   (bottom left)
+# # 45.47541990014997, -75.56705474853517   (top right)
+# min_latitude = 45.36842857439341
+# max_latitude = 45.47541990014997
+# min_longitude = -75.76498031616212
+# max_longitude = -75.56705474853517
+# min_zoom_level = 13
+# max_zoom_level = 18
 
 # url_pattern = "https://maps.ottawa.ca/arcgis/rest/services/Basemap_Imagery_1965/MapServer/tile/{z}/{y}/{x}"
 # output_dir = "1965_esri"
@@ -35,14 +35,14 @@ max_zoom_level = 18
 # min_zoom_level = 13
 # max_zoom_level = 18
 
-# url_pattern = "https://maps.ottawa.ca/arcgis/rest/services/Basemap_Imagery_1958/MapServer/tile/{z}/{y}/{x}"
-# output_dir = "1958_esri"
-# min_latitude = 45.308941579503745
-# max_latitude = 45.49359307512666
-# min_longitude = -75.89183807373048
-# max_longitude = -75.50354003906251
-# min_zoom_level = 13
-# max_zoom_level = 18
+url_pattern = "https://maps.ottawa.ca/arcgis/rest/services/Basemap_Imagery_1958/MapServer/tile/{z}/{y}/{x}"
+output_dir = "1958_esri"
+min_latitude = 45.308941579503745
+max_latitude = 45.49359307512666
+min_longitude = -75.89183807373048
+max_longitude = -75.50354003906251
+min_zoom_level = 13
+max_zoom_level = 18
 
 # these ESRI directories seem like they're zoompath
 # i.e. - 13 in the above calc gives Tile Row: 2395, Tile Column: 2900
