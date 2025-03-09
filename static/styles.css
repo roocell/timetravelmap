@@ -68,5 +68,13 @@ input::-moz-focus-inner {
 
 }
   
-  
+/* Disable the pull-to-refresh behavior */
+html, body {
+  overscroll-behavior: none; /* Prevents pull-to-refresh on mobile */
+}
+
+/* Disable touch actions on the slider element */
+input[type="range"] {
+  touch-action: none; /* Prevents touch gestures from triggering pull-to-refresh */
+}
   

@@ -8,6 +8,13 @@ app = Flask(
     static_folder='static'  # Name of directory for static files
 )
 
+# Middleware to enforce HTTPS
+@app.before_request
+def before_request():
+    if not request.is_secure:
+        return redirect(f"https://{request.host}{request.path}", code=301)
+
+
 # disable all the http GET 404 logs
 # Suppress logging for static files
 @app.before_request
@@ -25,4 +32,5 @@ if len(os.sys.argv) == 2:
   myport = os.sys.argv[1]
 
 if __name__ == '__main__':
-  app.run(host='0.0.0.0', port=myport, debug=True)
+  app.run(host='0.0.0.0', port=myport, debug=True,
+          ssl_context=('/home/roocell/fullchain.pem', '/home/roocell/privkey.pem'))

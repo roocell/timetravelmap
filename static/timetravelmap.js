@@ -126,11 +126,49 @@ function removeLayerToMap(layer_index)
     // through the years very smoothly without loading tiles.
 }
 
+let currentLocationMarker;
+
+// Define an event handler to add a marker at the user's current location
+function showCurrentLocation() {
+    if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(function(position) {
+            var lat = position.coords.latitude;
+            var lng = position.coords.longitude;
+
+            // If there's already a marker, remove it before adding a new one
+            if (currentLocationMarker) {
+                currentLocationMarker.setLatLng([lat, lng]);
+            } else {
+                // Add a new blue circle marker at the user's current location
+                currentLocationMarker = L.circleMarker([lat, lng], {
+                    color: 'blue',           // Set the circle color to blue
+                    fillColor: 'blue',       // Fill color inside the circle
+                    fillOpacity: 0.6,        // Set fill opacity
+                    radius: 8                // Set circle radius
+                }).addTo(map);
+            }
+
+            // Optionally, bind a popup to the marker
+            //currentLocationMarker.bindPopup("You are here").openPopup();
+
+            // Set the map view to the current location with a zoom level
+            //map.setView([lat, lng], 13);
+        }, function(error) {
+            console.warn("Error getting location: " + error.message);
+        });
+    } else {
+        alert("Geolocation is not supported by this browser.");
+    }
+}
+
+setInterval(showCurrentLocation, 5000);
 
 window.addEventListener('load', function() {
     map.setZoom(13); // start way out (to prevent so many 404s at startup)
     
     addLayerToMap(start_layer_index);
+
+    showCurrentLocation();
 
     // free satellite
     // L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
@@ -243,7 +281,6 @@ map.on('zoom', onZoom);
 map.on('error', function (error) {
     console.warn('map error:', error);
 });
-
 
 document.getElementById('toggle-layers').addEventListener('click', function () {
     layersVisible = !layersVisible;
