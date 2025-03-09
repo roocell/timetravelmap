@@ -1,11 +1,19 @@
 from flask import Flask, render_template, flash, redirect, url_for, request
 import os
+import logging
 
 app = Flask(
     __name__,
     template_folder='templates',  # Name of html file folder
     static_folder='static'  # Name of directory for static files
 )
+
+# disable all the http GET 404 logs
+# Suppress logging for static files
+@app.before_request
+def disable_static_logs():
+    if request.path.startswith('/static/data'):
+        logging.getLogger('werkzeug').setLevel(logging.ERROR)
 
 @app.route('/')
 def home_page():
