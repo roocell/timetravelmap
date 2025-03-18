@@ -1,8 +1,40 @@
 
 // Initialize the map
-var map = L.map('map').setView([45.39793819727917, -75.72070285499208], 100.0);
 var layers = []; // all the tile layers
 let layersVisible = true;
+var marker = null;
+
+// Function to get URL parameters
+function getQueryParam(param, defaultValue) {
+    const urlParams = new URLSearchParams(window.location.search);
+    return urlParams.has(param) ? parseFloat(urlParams.get(param)) : defaultValue;
+}
+// Get lat/lng from URL or use default values
+const defaultLat = 45.39793819727917;
+const defaultLng = -75.72070285499208;
+
+function getQueryParam(param, defaultValue) {
+    const urlParams = new URLSearchParams(window.location.search);
+    return urlParams.has(param) ? parseFloat(urlParams.get(param)) : defaultValue;
+}
+
+const lat = parseFloat(getQueryParam('lat', defaultLat));
+const lng = parseFloat(getQueryParam('lng', defaultLng));
+const zoom = parseInt(getQueryParam('z', null), 10);
+const layerIndex = parseInt(getQueryParam('l', null), 10);
+
+var current_layer_index = 1;
+const map = L.map('map').setView([defaultLat, defaultLng], 13);
+
+if (!isNaN(lat) && !isNaN(lng)) {
+    map.setView([lat, lng], !isNaN(zoom)?zoom:13);
+    if (lat != defaultLat)
+        marker = L.marker([lat, lng]).addTo(map);
+}
+if (layerIndex != null && !isNaN(layerIndex))
+{
+    current_layer_index = layerIndex;
+}
 
 // Add a base layer (optional)
 L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -40,9 +72,6 @@ var sliderValues = [
     1928,
     1879
 ];
-var start_layer_index = 1;
-
-
 
 map.refresh = function(timeout, zoom){
     window.setTimeout(function(){
@@ -166,7 +195,7 @@ setInterval(showCurrentLocation, 5000);
 window.addEventListener('load', function() {
     map.setZoom(13); // start way out (to prevent so many 404s at startup)
     
-    addLayerToMap(start_layer_index);
+    addLayerToMap(current_layer_index);
 
     showCurrentLocation();
 
@@ -182,7 +211,7 @@ window.addEventListener('load', function() {
     range.min = 0.0;
     range.max = layerUrls.length - 1;
     range.step = "any";
-    range.value = start_layer_index;
+    range.value = current_layer_index;
 
     // make 1965 full opacity
     layers[range.value].setOpacity(1.0);
@@ -210,6 +239,8 @@ window.addEventListener('load', function() {
       // (fade in/out
       var layer1_idx = Math.floor(this.value);
       var layer2_idx = layer1_idx + 1;
+
+      current_layer_index = layer1_idx;
 
       addLayerToMap(layer1_idx);
       addLayerToMap(layer2_idx);
@@ -243,7 +274,6 @@ window.addEventListener('load', function() {
 
 
 // Define an event handler for map clicks
-var marker = null;
 function onMapClick(e) {
     if (marker)
     {
@@ -258,7 +288,13 @@ function onMapClick(e) {
     marker = L.marker([lat, lng]).addTo(map);
 
     // You can customize the marker popup or other properties here
-    marker.bindPopup(lat + ", " + lng).openPopup();
+    var latlng = lat + ",<BR>" + lng;
+    var baseUrl = window.location.origin;
+    var ttm_link = `<a href="${baseUrl}/?lat=${lat}&lng=${lng}&z=${map.getZoom()}&l=${current_layer_index}">TMM Link</a>`;
+    var gm_link = `<a href="https://www.google.com/maps/place/${lat},${lng}">Google Maps Link</a>`;
+
+    var popuptext = latlng + "<br>" + ttm_link + "<BR>" + gm_link;
+    marker.bindPopup(popuptext).openPopup();
 }
 map.on('click', onMapClick);
 
