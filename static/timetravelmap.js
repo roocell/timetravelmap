@@ -38,7 +38,8 @@ if (layerIndex != null && !isNaN(layerIndex))
 
 // Add a base layer (optional)
 L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    maxZoom: 22
 }).addTo(map);
 
 var layerUrls = [
@@ -46,7 +47,7 @@ var layerUrls = [
     //"https://maps.ottawa.ca/arcgis/rest/services/Basemap_Imagery_1928/MapServer",
     // "static/data/1928_esri",
     "static/data/1928/{z}/{x}/{y}.png",
-    "static/data/1933/{z}/{x}/{y}.png",
+    "static/data/1930s/{z}/{x}/{y}.png",
     "static/data/1945/{z}/{x}/{y}.png",
     "static/data/1954/{z}/{x}/{y}.png",
     "static/data/1958/{z}/{x}/{y}.png",
@@ -57,18 +58,21 @@ var layerUrls = [
     // "https://maps.ottawa.ca/arcgis/rest/services/Basemap_Imagery_1976/MapServer",
     // "https://maps.ottawa.ca/arcgis/rest/services/Basemap_Imagery_2002/MapServer",
     "static/data/2015_lidar/{z}/{x}/{y}.png",
+    "static/data/hrdem/{z}/{x}/{y}.png",
+    // "https://datacube.services.geo.ca/wrapper/ogc/elevation-hrdem-mosaic?",
     // "https://maps.ottawa.ca/arcgis/rest/services/Basemap_Imagery_2022/MapServer",
     "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
 ];
 var sliderValues = [
     "New",
+    "hrdem",
     "lidar",
     // 1976,
     1965,
     1958,
     1954,
     1945,
-    1933,
+    "1930s",
     1928,
     1879
 ];
@@ -95,20 +99,28 @@ map.refresh = function(timeout, zoom){
 
 function addLayerToMap(layer_index)
 {
+    if (layer_index >= layerUrls.length)
+        return;
     if (typeof layers[layer_index] === 'undefined')
     {
         // argis satellite
         if (layerUrls[layer_index].includes("arcgisonline"))
         {
+            var options = {
+                minNativeZoom: 12,
+                maxNativeZoom: 17,
+                minZoom: 5,
+                maxZoom: 22,
+                attribution: 'arcgisonline',
+            };
             layers[layer_index] = L.tileLayer(layerUrls[layer_index], options).addTo(map);
         } else if (layerUrls[layer_index].includes("static") && !layerUrls[layer_index].includes("esri"))
         {
             console.log("TILES adding " + layerUrls[layer_index]);
             // local tiles
             // NOTE: if the generated tiles aren't generated to mapMaxZoom - they will go blank
-            var mapMinZoom = 5;
-            var mapMaxZoom = 18;
-            var layer;
+            var mapMinZoom = 12;
+            var mapMaxZoom = 17;
             var options = {
                 minNativeZoom: mapMinZoom,
                 maxNativeZoom: mapMaxZoom,
@@ -119,6 +131,18 @@ function addLayerToMap(layer_index)
                 tms: false
             };
             layers[layer_index] = L.tileLayer(layerUrls[layer_index], options).addTo(map);
+        } else if (layerUrls[layer_index].includes("hrdem")) {
+            console.log("adding hrdem");
+            var options = {
+                layers: 'dtm-hillshade',
+                format: 'image/png',
+                attribution: "Canada HRDEM",
+                minNativeZoom: 12,
+                maxNativeZoom: 17,
+                minZoom: 5,
+                maxZoom: 22
+            };
+            layers[layer_index] = L.tileLayer(layerUrls[layer_index], options).addTo(map);    
         } else {
             // city of ottawa source
             console.log("ESRI TILES adding " + layerUrls[layer_index]);
@@ -290,7 +314,8 @@ function onMapClick(e) {
     // You can customize the marker popup or other properties here
     var latlng = lat + ",<BR>" + lng;
     var baseUrl = window.location.origin;
-    var ttm_link = `<a href="${baseUrl}/?lat=${lat}&lng=${lng}&z=${map.getZoom()}&l=${current_layer_index}">TMM Link</a>`;
+    var zoom = Math.min(map.getZoom(), 17);
+    var ttm_link = `<a href="${baseUrl}/?lat=${lat}&lng=${lng}&z=${zoom}&l=${current_layer_index}">TTM Link</a>`;
     var gm_link = `<a href="https://www.google.com/maps/place/${lat},${lng}">Google Maps Link</a>`;
 
     var popuptext = latlng + "<br>" + ttm_link + "<BR>" + gm_link;

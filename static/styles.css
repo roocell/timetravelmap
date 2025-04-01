@@ -25,7 +25,7 @@
 /* Vertical Slider container */
 .range-slider {
     position: absolute;
-    z-index: 2;
+    z-index: 10;
     top: 20vh; /* half of 100-60vh of .input-range */
     right: 0px; /* Adjust the left position based on your needs */
   }
