@@ -343,16 +343,14 @@ map.on('error', function (error) {
     console.warn('map error:', error);
 });
 
-document.getElementById('toggle-layers').addEventListener('click', function () {
-    layersVisible = !layersVisible;
-    var range = document.querySelector('.input-range');
-    var layer1_idx = Math.floor(range.value);
-    var layer2_idx = layer1_idx + 1;
+function updateLayerVisibility() {
+    const range = document.querySelector('.input-range');
+    const layer1_idx = Math.floor(range.value);
+    const layer2_idx = layer1_idx + 1;
 
     if (layersVisible) {
-        // Recalculate opacity based on slider value
-        layer2_opacity = range.value % 1;
-        let layer1_opacity = 1.0 - layer2_opacity;
+        const layer2_opacity = range.value % 1;
+        const layer1_opacity = 1.0 - layer2_opacity;
 
         if (layer1_idx < layers.length) {
             layers[layer1_idx].setOpacity(layer1_opacity);
@@ -361,7 +359,21 @@ document.getElementById('toggle-layers').addEventListener('click', function () {
             layers[layer2_idx].setOpacity(layer2_opacity);
         }
     } else {
-        // Hide layers by setting opacity to 0
         layers.forEach(layer => layer.setOpacity(0));
+    }
+}
+
+// Toggle visibility with click
+document.getElementById('toggle-layers').addEventListener('click', function () {
+    layersVisible = !layersVisible;
+    updateLayerVisibility();
+});
+
+// Toggle visibility with spacebar
+document.addEventListener('keydown', function (e) {
+    if (e.code === 'Space') {
+        e.preventDefault(); // Prevent page scrolling
+        layersVisible = !layersVisible;
+        updateLayerVisibility();
     }
 });
