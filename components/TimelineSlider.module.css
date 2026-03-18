@@ -1,0 +1,147 @@
+.timeline {
+  display: grid;
+  gap: 12px;
+  padding: 0 24px 24px;
+}
+
+.timelineHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.timelineMeta {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: #15313f;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.timelineHint {
+  color: #6a7d88;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.sliderRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 24px;
+}
+
+.trackGroup {
+  flex: 1;
+  min-width: 0;
+}
+
+.sliderShell {
+  flex: 1;
+  width: 100%;
+}
+
+.slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 10px;
+  margin: 0;
+  border-radius: 6px;
+  background: rgba(21, 49, 63, 0.16);
+  outline: none;
+}
+
+.slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  background: #15313f;
+  cursor: pointer;
+  border: 2px solid white;
+  box-shadow: 0 4px 12px rgba(21, 49, 63, 0.22);
+}
+
+.slider::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  background: #15313f;
+  cursor: pointer;
+  border: 2px solid white;
+  box-shadow: 0 4px 12px rgba(21, 49, 63, 0.22);
+}
+
+.slider::-moz-range-track {
+  height: 10px;
+  border-radius: 6px;
+  background: rgba(21, 49, 63, 0.16);
+}
+
+.sliderValues {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  color: #526773;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.sliderValue {
+  white-space: nowrap;
+}
+
+.currentLabel {
+  min-width: 96px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  text-align: right;
+  color: #15313f;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+@media (max-width: 700px) {
+  .timeline {
+    gap: 12px;
+    padding: 0 16px 16px;
+  }
+
+  .timelineHeader {
+    align-items: start;
+    flex-direction: column;
+  }
+
+  .slider {
+    width: 100%;
+  }
+
+  .sliderRow {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .trackGroup {
+    width: 100%;
+  }
+
+  .sliderValues {
+    overflow-x: auto;
+    padding-bottom: 4px;
+  }
+
+  .currentLabel {
+    min-width: 0;
+    text-align: left;
+  }
+}
