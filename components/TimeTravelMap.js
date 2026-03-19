@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import L from "leaflet";
 import { Eye, EyeOff, Layers3, Map as MapIcon, Search } from "lucide-react";
-import styles from "./TimeTravelMap.module.css";
+import DatasetsCard from "./DatasetsCard";
 import TimelineSlider from "./TimelineSlider";
 import { Button } from "./ui/Button";
 import { Card } from "./ui/Card";
@@ -15,15 +15,15 @@ const MIN_NATIVE_ZOOM = 12;
 const MAX_NATIVE_ZOOM = 12;
 
 const layerUrls = [
-  "/1879/{z}/{x}/{y}.png",
-  "/1928/{z}/{x}/{y}.png",
-  "/1930s/{z}/{x}/{y}.png",
-  "/1945/{z}/{x}/{y}.png",
-  "/1954/{z}/{x}/{y}.png",
-  "/1958/{z}/{x}/{y}.png",
-  "/1965/{z}/{x}/{y}.png",
-  "/2015_lidar/{z}/{x}/{y}.png",
-  "/hrdem/{z}/{x}/{y}.png",
+  "/tiles/1879/{z}/{x}/{y}.png",
+  "/tiles/1928/{z}/{x}/{y}.png",
+  "/tiles/1930s/{z}/{x}/{y}.png",
+  "/tiles/1945/{z}/{x}/{y}.png",
+  "/tiles/1954/{z}/{x}/{y}.png",
+  "/tiles/1958/{z}/{x}/{y}.png",
+  "/tiles/1965/{z}/{x}/{y}.png",
+  "/tiles/2015_lidar/{z}/{x}/{y}.png",
+  "/tiles/hrdem/{z}/{x}/{y}.png",
   "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
 ];
 
@@ -72,9 +72,16 @@ function createTileLayer(url, opacity) {
   });
 }
 
-export default function TimeTravelMap() {
+export default function TimeTravelMap({
+  datasets,
+  activeYears = [],
+  prospectsActive = false,
+  onToggleYear = () => {},
+  onToggleProspects = () => {}
+}) {
   const mapElementRef = useRef(null);
   const layerRefs = useRef([]);
+  const datasetLayerRefs = useRef(new Map());
   const mapRef = useRef(null);
   const markerRef = useRef(null);
   const currentLocationMarkerRef = useRef(null);
@@ -101,6 +108,12 @@ export default function TimeTravelMap() {
 
     return layerRefs.current[layerIndex];
   };
+
+  const createDatasetPopup = (title, lines) =>
+    [
+      `<strong>${title}</strong>`,
+      ...lines.filter(Boolean).map((line) => `<div>${line}</div>`)
+    ].join("");
 
   const setActiveLayerOpacities = (value, visible) => {
     const layer1Index = Math.floor(value);
@@ -267,6 +280,10 @@ export default function TimeTravelMap() {
       currentLocationMarkerRef.current = null;
       markerRef.current = null;
       map.off("click", handleMapClick);
+      datasetLayerRefs.current.forEach((layer) => {
+        map.removeLayer(layer);
+      });
+      datasetLayerRefs.current.clear();
       map.remove();
       mapRef.current = null;
       layerRefs.current = [];
@@ -279,40 +296,167 @@ export default function TimeTravelMap() {
     setActiveLayerOpacities(sliderValueRef.current, nextVisible);
   };
 
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) {
+      return;
+    }
+
+    const syncDatasetLayers = async () => {
+      const desiredKeys = new Set([
+        ...activeYears.map((year) => `year:${year}`),
+        ...(prospectsActive ? ["prospects"] : [])
+      ]);
+
+      for (const [key, layer] of datasetLayerRefs.current.entries()) {
+        if (!desiredKeys.has(key)) {
+          map.removeLayer(layer);
+          datasetLayerRefs.current.delete(key);
+        }
+      }
+
+      for (const year of activeYears) {
+        const key = `year:${year}`;
+        if (datasetLayerRefs.current.has(key)) {
+          continue;
+        }
+
+        const response = await fetch(`/api/datasets/features?year=${year}`);
+        if (!response.ok) {
+          continue;
+        }
+
+        const payload = await response.json();
+        const layerGroup = L.layerGroup();
+
+        for (const event of payload.events ?? []) {
+          const geoJsonLayer = L.geoJSON(event.geometry, {
+            style: {
+              color: event.outlineColor ?? "#0f5e7d",
+              weight: event.outlineWidth ?? 3,
+              fillColor: event.fillColor ?? "#8cc9de",
+              fillOpacity: 0.25
+            }
+          });
+
+          geoJsonLayer.bindPopup(
+            createDatasetPopup(event.title, [
+              event.eventDate ? `Date: ${String(event.eventDate).slice(0, 10)}` : null,
+              event.description
+            ])
+          );
+          geoJsonLayer.addTo(layerGroup);
+        }
+
+        for (const find of payload.finds ?? []) {
+          const marker = L.circleMarker([find.latitude, find.longitude], {
+            radius: 7,
+            color: "#8f2d56",
+            fillColor: "#d94c86",
+            fillOpacity: 0.9,
+            weight: 2
+          });
+
+          marker.bindPopup(
+            createDatasetPopup(find.title, [
+              find.findDate ? `Date: ${String(find.findDate).slice(0, 10)}` : null,
+              find.type ? `Type: ${find.type}` : null,
+              find.metal ? `Metal: ${find.metal}` : null,
+              find.itemCount ? `Count: ${find.itemCount}` : null,
+              find.description
+            ])
+          );
+          marker.addTo(layerGroup);
+        }
+
+        layerGroup.addTo(map);
+        datasetLayerRefs.current.set(key, layerGroup);
+      }
+
+      if (prospectsActive && !datasetLayerRefs.current.has("prospects")) {
+        const response = await fetch("/api/datasets/features?dataset=prospects");
+        if (!response.ok) {
+          return;
+        }
+
+        const payload = await response.json();
+        const layerGroup = L.layerGroup();
+
+        for (const prospect of payload.prospects ?? []) {
+          const marker = L.circleMarker([prospect.latitude, prospect.longitude], {
+            radius: 8,
+            color: "#1f6f43",
+            fillColor: "#39a96b",
+            fillOpacity: 0.92,
+            weight: 2
+          });
+
+          marker.bindPopup(
+            createDatasetPopup(prospect.title, [
+              prospect.ageLabel ? `Age: ${prospect.ageLabel}` : null,
+              prospect.dateVisited
+                ? `Visited: ${String(prospect.dateVisited).slice(0, 10)}`
+                : null,
+              prospect.description
+            ])
+          );
+          marker.addTo(layerGroup);
+        }
+
+        layerGroup.addTo(map);
+        datasetLayerRefs.current.set("prospects", layerGroup);
+      }
+    };
+
+    syncDatasetLayers();
+  }, [activeYears, prospectsActive]);
+
   return (
-    <main className={styles.page}>
-      <section className={styles.pageHeader}>
+    <main className="min-h-screen bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.7),transparent_45%),linear-gradient(180deg,#dce8ef_0%,#c3d2db_100%)] p-8 max-[700px]:p-4">
+      <section className="mx-auto mb-5 flex max-w-[1400px] items-end justify-between gap-6 max-[700px]:mb-4 max-[700px]:flex-col max-[700px]:items-start">
         <div>
-          <p className={styles.eyebrow}>Ottawa Layers</p>
-          <div className={styles.titleGroup}>
-            <span className={styles.titleIconWrap}>
+          <p className="mb-1.5 text-[12px] font-bold uppercase tracking-[0.16em] text-[#6a7d88]">
+            Ottawa Layers
+          </p>
+          <div className="flex items-center gap-3.5">
+            <span className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-b from-[#eaf1f5] to-[#d6e2e8] text-[#15313f] shadow-[inset_0_1px_0_rgba(255,255,255,0.65)]">
               <MapIcon size={24} strokeWidth={2.1} />
             </span>
-            <h1 className={styles.title}>Time Travel Map</h1>
+            <h1 className="m-0 text-[clamp(28px,4vw,44px)] leading-[0.95] text-[#15313f]">
+              Time Travel Map
+            </h1>
           </div>
         </div>
-        <p className={styles.subtitle}>
-          Crossfade between historical imagery, lidar, and modern satellite
-          tiles while keeping the Leaflet map interactions intact.
+        <p className="m-0 max-w-[460px] text-[14px] leading-[1.5] text-[#526773]">
+          Crossfade historical imagery, then switch into imported field data
+          sets from the KML archive below.
         </p>
       </section>
 
-      <Card className={styles.card}>
-        <div className={styles.toolbar}>
-          <div className={styles.toolbarGroup}>
-            <div className={styles.toolbarLabel}>
+      <Card className="mx-auto max-w-[1400px]">
+        <div className="m-0 flex items-center justify-between gap-4 border-b border-[rgba(21,49,63,0.08)] bg-gradient-to-b from-[rgba(240,246,249,0.96)] to-[rgba(232,239,243,0.96)] px-4 py-[14px] max-[700px]:flex-col max-[700px]:items-stretch max-[700px]:p-3">
+          <div className="flex min-w-0 items-center gap-3 max-[700px]:justify-between">
+            <div className="inline-flex items-center gap-2.5 text-[12px] font-bold uppercase tracking-[0.08em] text-[#5a6d78]">
               <Layers3 size={15} strokeWidth={2.2} />
               <span>Map Controls</span>
             </div>
           </div>
 
-          <div className={styles.toolbarGroup}>
-            <Button type="button" variant="ghost" className={styles.panelContent}>
+          <div className="flex min-w-0 items-center gap-3 max-[700px]:justify-between">
+            <Button
+              type="button"
+              variant="ghost"
+              className="inline-flex items-center gap-2"
+            >
               <Search size={15} strokeWidth={2.2} />
               <span>{zoomLabel}</span>
             </Button>
 
-            <Button type="button" onClick={toggleLayers} className={styles.panelContent}>
+            <Button
+              type="button"
+              onClick={toggleLayers}
+              className="inline-flex items-center gap-2"
+            >
               {layersVisible ? (
                 <Eye size={15} strokeWidth={2.2} />
               ) : (
@@ -323,8 +467,8 @@ export default function TimeTravelMap() {
           </div>
         </div>
 
-        <div className={styles.mapCardBody}>
-          <div ref={mapElementRef} className={styles.map} />
+        <div className="relative m-0 h-[min(72vh,900px)] overflow-hidden bg-[#d9e3ea] max-[700px]:h-[68vh]">
+          <div ref={mapElementRef} className="h-full w-full" />
         </div>
 
         <TimelineSlider
@@ -335,6 +479,16 @@ export default function TimeTravelMap() {
           reversed
         />
       </Card>
+
+      <DatasetsCard
+        years={datasets?.years ?? []}
+        prospectCount={datasets?.prospects?.count ?? 0}
+        loading={datasets?.loading}
+        activeYears={activeYears}
+        prospectsActive={prospectsActive}
+        onToggleYear={onToggleYear}
+        onToggleProspects={onToggleProspects}
+      />
     </main>
   );
 }

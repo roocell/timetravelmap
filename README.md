@@ -1,6 +1,55 @@
 # timetravelmap
 map with various historical aerial photos. use a slider to time travel.
 
+# current product / tech status
+
+## frontend
+
+* Next.js 16 app router
+* React 19.2
+* Leaflet for the main interactive map and tile layering
+* Tailwind CSS v4 is now installed and started in the UI layer
+* Lucide icons are used in the interface
+* historical map tiles are served from `public/tiles`
+* downloaded KML images are served from `public/images`
+
+## backend / data
+
+* Supabase is the local database + API backend
+* custom schema: `timetravelmap`
+* Prisma ORM is used for app-side database access
+* PostGIS is enabled for event polygon geometry
+* `events` store polygon hunt areas
+* `finds` now use plain `latitude` / `longitude` instead of point geometry
+* `prospects` are stored separately from hunts/finds
+* `images` are normalized and attached through join tables
+
+## imported datasets
+
+* KML import pipeline now exists in `tools/import-kml.mjs`
+* annual hunt KMLs import into `events` and `finds`
+* `Prospects.kml` imports into `prospects`
+* polygon-only prospects are converted to an approximate pin location for display
+* imported records are now exposed in the app through dataset APIs and can be toggled on the map
+
+## local development notes
+
+* local Supabase runs on:
+  * API: `http://127.0.0.1:55431`
+  * DB: `postgresql://postgres:postgres@127.0.0.1:55432/postgres`
+  * Studio: `http://127.0.0.1:55433`
+* app env vars are expected in `.env`
+* `.env` and `.env.local` are gitignored
+
+## recent implementation decisions
+
+* the old Flask app has been removed from the active runtime path
+* local helper scripts now live in `tools/`
+* tile serving uses standard Next public assets instead of a custom tile API route
+* dataset buttons under the map now reflect imported DB years and prospects
+* clicking a dataset button toggles imported polygons / pins directly in Leaflet
+* event polygons render with a 25% fill opacity for readability over the basemap
+
 # workflow
 
 ## python scripts
