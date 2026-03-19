@@ -6,7 +6,7 @@ import { Eye, EyeOff, Layers3, Map as MapIcon, Search } from "lucide-react";
 import styles from "./TimeTravelMap.module.css";
 import TimelineSlider from "./TimelineSlider";
 import { Button } from "./ui/Button";
-import { Card, CardContent, CardHeader } from "./ui/Card";
+import { Card } from "./ui/Card";
 
 const DEFAULT_LAT = 45.39793819727917;
 const DEFAULT_LNG = -75.72070285499208;
@@ -15,15 +15,15 @@ const MIN_NATIVE_ZOOM = 12;
 const MAX_NATIVE_ZOOM = 12;
 
 const layerUrls = [
-  "/api/tiles/1879/{z}/{x}/{y}.png",
-  "/api/tiles/1928/{z}/{x}/{y}.png",
-  "/api/tiles/1930s/{z}/{x}/{y}.png",
-  "/api/tiles/1945/{z}/{x}/{y}.png",
-  "/api/tiles/1954/{z}/{x}/{y}.png",
-  "/api/tiles/1958/{z}/{x}/{y}.png",
-  "/api/tiles/1965/{z}/{x}/{y}.png",
-  "/api/tiles/2015_lidar/{z}/{x}/{y}.png",
-  "/api/tiles/hrdem/{z}/{x}/{y}.png",
+  "/data/1879/{z}/{x}/{y}.png",
+  "/data/1928/{z}/{x}/{y}.png",
+  "/data/1930s/{z}/{x}/{y}.png",
+  "/data/1945/{z}/{x}/{y}.png",
+  "/data/1954/{z}/{x}/{y}.png",
+  "/data/1958/{z}/{x}/{y}.png",
+  "/data/1965/{z}/{x}/{y}.png",
+  "/data/2015_lidar/{z}/{x}/{y}.png",
+  "/data/hrdem/{z}/{x}/{y}.png",
   "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
 ];
 
@@ -148,6 +148,8 @@ export default function TimeTravelMap() {
       return;
     }
 
+    let isMapActive = true;
+
     const searchParams = new URLSearchParams(window.location.search);
     const lat = getNumericParam(searchParams, "lat", DEFAULT_LAT);
     const lng = getNumericParam(searchParams, "lng", DEFAULT_LNG);
@@ -181,12 +183,16 @@ export default function TimeTravelMap() {
     }
 
     const showCurrentLocation = () => {
-      if (!navigator.geolocation) {
+      if (!navigator.geolocation || !isMapActive || !mapRef.current) {
         return;
       }
 
       navigator.geolocation.getCurrentPosition(
         (position) => {
+          if (!isMapActive || !mapRef.current || !mapRef.current.getPanes()?.overlayPane) {
+            return;
+          }
+
           const point = [position.coords.latitude, position.coords.longitude];
 
           if (currentLocationMarkerRef.current) {
@@ -251,12 +257,15 @@ export default function TimeTravelMap() {
     document.addEventListener("keydown", handleKeyDown);
 
     return () => {
+      isMapActive = false;
       document.removeEventListener("keydown", handleKeyDown);
 
       if (geolocationIntervalRef.current) {
         window.clearInterval(geolocationIntervalRef.current);
       }
 
+      currentLocationMarkerRef.current = null;
+      markerRef.current = null;
       map.off("click", handleMapClick);
       map.remove();
       mapRef.current = null;
@@ -272,24 +281,23 @@ export default function TimeTravelMap() {
 
   return (
     <main className={styles.page}>
-      <Card className={styles.card}>
-        <CardHeader className={styles.cardHeader}>
-          <div>
-            <p className={styles.eyebrow}>Ottawa Layers</p>
-            <div className={styles.titleGroup}>
-              <span className={styles.titleIconWrap}>
-                <MapIcon size={24} strokeWidth={2.1} />
-              </span>
-              <h1 className={styles.title}>Time Travel Map</h1>
-            </div>
+      <section className={styles.pageHeader}>
+        <div>
+          <p className={styles.eyebrow}>Ottawa Layers</p>
+          <div className={styles.titleGroup}>
+            <span className={styles.titleIconWrap}>
+              <MapIcon size={24} strokeWidth={2.1} />
+            </span>
+            <h1 className={styles.title}>Time Travel Map</h1>
           </div>
-          <p className={styles.subtitle}>
-            Crossfade between historical imagery, lidar, and modern satellite
-            tiles while keeping the Leaflet map interactions intact.
-          </p>
-        </CardHeader>
+        </div>
+        <p className={styles.subtitle}>
+          Crossfade between historical imagery, lidar, and modern satellite
+          tiles while keeping the Leaflet map interactions intact.
+        </p>
+      </section>
 
-        <CardContent>
+      <Card className={styles.card}>
         <div className={styles.toolbar}>
           <div className={styles.toolbarGroup}>
             <div className={styles.toolbarLabel}>
@@ -318,7 +326,6 @@ export default function TimeTravelMap() {
         <div className={styles.mapCardBody}>
           <div ref={mapElementRef} className={styles.map} />
         </div>
-        </CardContent>
 
         <TimelineSlider
           labels={sliderValues}

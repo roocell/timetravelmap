@@ -1,7 +1,9 @@
 .timeline {
   display: grid;
   gap: 12px;
-  padding: 0 24px 24px;
+  padding: 16px 24px 20px;
+  border-top: 1px solid rgba(21, 49, 63, 0.08);
+  background: linear-gradient(180deg, rgba(247, 250, 252, 0.94) 0%, rgba(240, 245, 248, 0.94) 100%);
 }
 
 .timelineHeader {
@@ -113,7 +115,7 @@
 @media (max-width: 700px) {
   .timeline {
     gap: 12px;
-    padding: 0 16px 16px;
+    padding: 14px 16px 16px;
   }
 
   .timelineHeader {

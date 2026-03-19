@@ -9,10 +9,16 @@
 .card {
   max-width: 1400px;
   margin: 0 auto;
+  overflow: hidden;
 }
 
-.cardHeader {
-  position: relative;
+.pageHeader {
+  max-width: 1400px;
+  margin: 0 auto 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 24px;
 }
 
 .eyebrow {
@@ -62,11 +68,10 @@
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  margin: 0 20px 16px;
+  margin: 0;
   padding: 14px 16px;
-  border: 1px solid rgba(21, 49, 63, 0.08);
-  border-radius: 18px;
-  background: linear-gradient(180deg, rgba(240, 246, 249, 0.92) 0%, rgba(232, 239, 243, 0.92) 100%);
+  border-bottom: 1px solid rgba(21, 49, 63, 0.08);
+  background: linear-gradient(180deg, rgba(240, 246, 249, 0.96) 0%, rgba(232, 239, 243, 0.96) 100%);
 }
 
 .toolbarGroup {
@@ -90,8 +95,7 @@
 .mapCardBody {
   position: relative;
   height: min(72vh, 900px);
-  margin: 0 20px 20px;
-  border-radius: 20px;
+  margin: 0;
   overflow: hidden;
   background: #d9e3ea;
 }
@@ -112,19 +116,19 @@
     padding: 16px;
   }
 
-  .cardHeader {
+  .pageHeader {
+    margin-bottom: 16px;
     align-items: start;
+    flex-direction: column;
   }
 
   .mapCardBody {
     height: 68vh;
-    margin: 0 12px 12px;
   }
 
   .toolbar {
     flex-direction: column;
     align-items: stretch;
-    margin: 0 12px 12px;
     padding: 12px;
   }
 
