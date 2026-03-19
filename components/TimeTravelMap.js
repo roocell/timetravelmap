@@ -15,15 +15,15 @@ const MIN_NATIVE_ZOOM = 12;
 const MAX_NATIVE_ZOOM = 12;
 
 const layerUrls = [
-  "/data/1879/{z}/{x}/{y}.png",
-  "/data/1928/{z}/{x}/{y}.png",
-  "/data/1930s/{z}/{x}/{y}.png",
-  "/data/1945/{z}/{x}/{y}.png",
-  "/data/1954/{z}/{x}/{y}.png",
-  "/data/1958/{z}/{x}/{y}.png",
-  "/data/1965/{z}/{x}/{y}.png",
-  "/data/2015_lidar/{z}/{x}/{y}.png",
-  "/data/hrdem/{z}/{x}/{y}.png",
+  "/1879/{z}/{x}/{y}.png",
+  "/1928/{z}/{x}/{y}.png",
+  "/1930s/{z}/{x}/{y}.png",
+  "/1945/{z}/{x}/{y}.png",
+  "/1954/{z}/{x}/{y}.png",
+  "/1958/{z}/{x}/{y}.png",
+  "/1965/{z}/{x}/{y}.png",
+  "/2015_lidar/{z}/{x}/{y}.png",
+  "/hrdem/{z}/{x}/{y}.png",
   "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
 ];
 
