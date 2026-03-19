@@ -4,10 +4,12 @@ import { useEffect, useRef, useState } from "react";
 import L from "leaflet";
 import { Eye, EyeOff, Layers3, Map as MapIcon, Search } from "lucide-react";
 import DatasetsCard from "./DatasetsCard";
+import FeatureDetailsModal from "./FeatureDetailsModal";
 import TimelineSlider from "./TimelineSlider";
 import { Button } from "./ui/Button";
 import { Card } from "./ui/Card";
 
+const MAP_VIEW_STATE_KEY = "ttm.map-view-state";
 const DEFAULT_LAT = 45.39793819727917;
 const DEFAULT_LNG = -75.72070285499208;
 const DEFAULT_ZOOM = 12;
@@ -72,6 +74,52 @@ function createTileLayer(url, opacity) {
   });
 }
 
+function normalizeLeafletColor(value, fallback) {
+  const color = String(value ?? "").trim();
+
+  if (/^#[0-9a-f]{8}$/i.test(color)) {
+    return color.slice(0, 7);
+  }
+
+  if (/^#[0-9a-f]{6}$/i.test(color)) {
+    return color;
+  }
+
+  return fallback;
+}
+
+function loadSavedMapView() {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  try {
+    const raw = window.localStorage.getItem(MAP_VIEW_STATE_KEY);
+    if (!raw) {
+      return null;
+    }
+
+    const parsed = JSON.parse(raw);
+    if (
+      !Number.isFinite(parsed?.lat) ||
+      !Number.isFinite(parsed?.lng) ||
+      !Number.isFinite(parsed?.zoom) ||
+      !Number.isFinite(parsed?.sliderValue)
+    ) {
+      return null;
+    }
+
+    return {
+      lat: parsed.lat,
+      lng: parsed.lng,
+      zoom: parsed.zoom,
+      sliderValue: parsed.sliderValue
+    };
+  } catch {
+    return null;
+  }
+}
+
 export default function TimeTravelMap({
   datasets,
   activeYears = [],
@@ -91,6 +139,29 @@ export default function TimeTravelMap({
   const [zoomLabel, setZoomLabel] = useState(`Zoom: ${MIN_NATIVE_ZOOM}`);
   const [layersVisible, setLayersVisible] = useState(true);
   const [sliderValue, setSliderValue] = useState(1);
+  const [selectedFeature, setSelectedFeature] = useState(null);
+
+  const persistMapView = () => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const map = mapRef.current;
+    if (!map) {
+      return;
+    }
+
+    const center = map.getCenter();
+    window.localStorage.setItem(
+      MAP_VIEW_STATE_KEY,
+      JSON.stringify({
+        lat: center.lat,
+        lng: center.lng,
+        zoom: map.getZoom(),
+        sliderValue: sliderValueRef.current
+      })
+    );
+  };
 
   const ensureLayer = (layerIndex) => {
     const map = mapRef.current;
@@ -108,12 +179,6 @@ export default function TimeTravelMap({
 
     return layerRefs.current[layerIndex];
   };
-
-  const createDatasetPopup = (title, lines) =>
-    [
-      `<strong>${title}</strong>`,
-      ...lines.filter(Boolean).map((line) => `<div>${line}</div>`)
-    ].join("");
 
   const setActiveLayerOpacities = (value, visible) => {
     const layer1Index = Math.floor(value);
@@ -154,6 +219,7 @@ export default function TimeTravelMap({
     sliderValueRef.current = value;
     setSliderValue(value);
     setActiveLayerOpacities(value, layersVisible);
+    persistMapView();
   };
 
   useEffect(() => {
@@ -164,12 +230,21 @@ export default function TimeTravelMap({
     let isMapActive = true;
 
     const searchParams = new URLSearchParams(window.location.search);
-    const lat = getNumericParam(searchParams, "lat", DEFAULT_LAT);
-    const lng = getNumericParam(searchParams, "lng", DEFAULT_LNG);
-    const zoom = getNumericParam(searchParams, "z", DEFAULT_ZOOM);
-    const requestedLayerIndex = getNumericParam(searchParams, "l", 1);
+    const savedView = loadSavedMapView();
+    const lat = searchParams.has("lat")
+      ? getNumericParam(searchParams, "lat", DEFAULT_LAT)
+      : savedView?.lat ?? DEFAULT_LAT;
+    const lng = searchParams.has("lng")
+      ? getNumericParam(searchParams, "lng", DEFAULT_LNG)
+      : savedView?.lng ?? DEFAULT_LNG;
+    const zoom = searchParams.has("z")
+      ? getNumericParam(searchParams, "z", DEFAULT_ZOOM)
+      : savedView?.zoom ?? DEFAULT_ZOOM;
+    const requestedLayerIndex = searchParams.has("l")
+      ? getNumericParam(searchParams, "l", 1)
+      : savedView?.sliderValue ?? 1;
     const initialLayerIndex = Math.min(
-      Math.max(Math.floor(requestedLayerIndex), 0),
+      Math.max(requestedLayerIndex, 0),
       layerUrls.length - 1
     );
 
@@ -246,11 +321,14 @@ export default function TimeTravelMap({
     map.on("zoom", () => {
       setZoomLabel(`Zoom: ${map.getZoom()}`);
     });
+    map.on("moveend", persistMapView);
+    map.on("zoomend", persistMapView);
     map.on("error", () => {});
 
     ensureLayer(initialLayerIndex);
     setActiveLayerOpacities(initialLayerIndex, true);
     setZoomLabel(`Zoom: ${map.getZoom()}`);
+    persistMapView();
     showCurrentLocation();
     geolocationIntervalRef.current = window.setInterval(showCurrentLocation, 5000);
 
@@ -280,6 +358,8 @@ export default function TimeTravelMap({
       currentLocationMarkerRef.current = null;
       markerRef.current = null;
       map.off("click", handleMapClick);
+      map.off("moveend", persistMapView);
+      map.off("zoomend", persistMapView);
       datasetLayerRefs.current.forEach((layer) => {
         map.removeLayer(layer);
       });
@@ -302,6 +382,8 @@ export default function TimeTravelMap({
       return;
     }
 
+    let cancelled = false;
+
     const syncDatasetLayers = async () => {
       const desiredKeys = new Set([
         ...activeYears.map((year) => `year:${year}`),
@@ -316,35 +398,50 @@ export default function TimeTravelMap({
       }
 
       for (const year of activeYears) {
+        if (cancelled || mapRef.current !== map || !map.getContainer()) {
+          return;
+        }
+
         const key = `year:${year}`;
         if (datasetLayerRefs.current.has(key)) {
           continue;
         }
 
         const response = await fetch(`/api/datasets/features?year=${year}`);
-        if (!response.ok) {
+        if (cancelled || mapRef.current !== map || !map.getContainer() || !response.ok) {
           continue;
         }
 
         const payload = await response.json();
+        if (cancelled || mapRef.current !== map || !map.getContainer()) {
+          return;
+        }
+
         const layerGroup = L.layerGroup();
 
         for (const event of payload.events ?? []) {
           const geoJsonLayer = L.geoJSON(event.geometry, {
             style: {
-              color: event.outlineColor ?? "#0f5e7d",
+              color: normalizeLeafletColor(event.outlineColor, "#0f5e7d"),
               weight: event.outlineWidth ?? 3,
-              fillColor: event.fillColor ?? "#8cc9de",
-              fillOpacity: 0.25
+              fill: true,
+              fillColor: normalizeLeafletColor(event.fillColor, "#8cc9de"),
+              fillOpacity: 0.5
             }
           });
 
-          geoJsonLayer.bindPopup(
-            createDatasetPopup(event.title, [
-              event.eventDate ? `Date: ${String(event.eventDate).slice(0, 10)}` : null,
-              event.description
-            ])
-          );
+          geoJsonLayer.on("click", () => {
+            setSelectedFeature({
+              kind: "event",
+              title: event.title,
+              eventDate: event.eventDate,
+              durationMinutes: event.durationMinutes,
+              deviceUsed: event.deviceUsed,
+              deviceMode: event.deviceMode,
+              description: event.description,
+              images: event.images ?? []
+            });
+          });
           geoJsonLayer.addTo(layerGroup);
         }
 
@@ -357,16 +454,24 @@ export default function TimeTravelMap({
             weight: 2
           });
 
-          marker.bindPopup(
-            createDatasetPopup(find.title, [
-              find.findDate ? `Date: ${String(find.findDate).slice(0, 10)}` : null,
-              find.type ? `Type: ${find.type}` : null,
-              find.metal ? `Metal: ${find.metal}` : null,
-              find.itemCount ? `Count: ${find.itemCount}` : null,
-              find.description
-            ])
-          );
+          marker.on("click", () => {
+            setSelectedFeature({
+              kind: "find",
+              title: find.title,
+              findDate: find.findDate,
+              ageLabel: find.ageLabel,
+              type: find.type,
+              metal: find.metal,
+              itemCount: find.itemCount,
+              description: find.description,
+              images: find.images ?? []
+            });
+          });
           marker.addTo(layerGroup);
+        }
+
+        if (cancelled || mapRef.current !== map || !map.getContainer()) {
+          return;
         }
 
         layerGroup.addTo(map);
@@ -375,11 +480,15 @@ export default function TimeTravelMap({
 
       if (prospectsActive && !datasetLayerRefs.current.has("prospects")) {
         const response = await fetch("/api/datasets/features?dataset=prospects");
-        if (!response.ok) {
+        if (cancelled || mapRef.current !== map || !map.getContainer() || !response.ok) {
           return;
         }
 
         const payload = await response.json();
+        if (cancelled || mapRef.current !== map || !map.getContainer()) {
+          return;
+        }
+
         const layerGroup = L.layerGroup();
 
         for (const prospect of payload.prospects ?? []) {
@@ -391,16 +500,21 @@ export default function TimeTravelMap({
             weight: 2
           });
 
-          marker.bindPopup(
-            createDatasetPopup(prospect.title, [
-              prospect.ageLabel ? `Age: ${prospect.ageLabel}` : null,
-              prospect.dateVisited
-                ? `Visited: ${String(prospect.dateVisited).slice(0, 10)}`
-                : null,
-              prospect.description
-            ])
-          );
+          marker.on("click", () => {
+            setSelectedFeature({
+              kind: "prospect",
+              title: prospect.title,
+              ageLabel: prospect.ageLabel,
+              dateVisited: prospect.dateVisited,
+              description: prospect.description,
+              images: prospect.images ?? []
+            });
+          });
           marker.addTo(layerGroup);
+        }
+
+        if (cancelled || mapRef.current !== map || !map.getContainer()) {
+          return;
         }
 
         layerGroup.addTo(map);
@@ -409,6 +523,10 @@ export default function TimeTravelMap({
     };
 
     syncDatasetLayers();
+
+    return () => {
+      cancelled = true;
+    };
   }, [activeYears, prospectsActive]);
 
   return (
@@ -489,6 +607,8 @@ export default function TimeTravelMap({
         onToggleYear={onToggleYear}
         onToggleProspects={onToggleProspects}
       />
+
+      <FeatureDetailsModal feature={selectedFeature} onClose={() => setSelectedFeature(null)} />
     </main>
   );
 }
