@@ -182,6 +182,7 @@ export default function TimeTravelMap({
   const mapElementRef = useRef(null);
   const layerRefs = useRef([]);
   const datasetLayerRefs = useRef(new Map());
+  const yearFeaturesCacheRef = useRef(new Map());
   const featureOverridesRef = useRef({});
   const mapRef = useRef(null);
   const markerRef = useRef(null);
@@ -202,6 +203,147 @@ export default function TimeTravelMap({
   const openFeature = (feature) => {
     const overrideKey = `${feature.kind}:${feature.id}`;
     setSelectedFeature(featureOverridesRef.current[overrideKey] ?? feature);
+  };
+
+  const scrollMapIntoView = () => {
+    mapElementRef.current?.scrollIntoView({
+      behavior: "smooth",
+      block: "center"
+    });
+  };
+
+  const fetchYearFeatures = async (year) => {
+    if (yearFeaturesCacheRef.current.has(year)) {
+      return yearFeaturesCacheRef.current.get(year);
+    }
+
+    const response = await fetch(`/api/datasets/features?year=${year}`);
+    if (!response.ok) {
+      return null;
+    }
+
+    const payload = await response.json();
+    yearFeaturesCacheRef.current.set(year, payload);
+    return payload;
+  };
+
+  const fetchProspectFeatures = async () => {
+    if (yearFeaturesCacheRef.current.has("prospects")) {
+      return yearFeaturesCacheRef.current.get("prospects");
+    }
+
+    const response = await fetch("/api/datasets/features?dataset=prospects");
+    if (!response.ok) {
+      return null;
+    }
+
+    const payload = await response.json();
+    yearFeaturesCacheRef.current.set("prospects", payload);
+    return payload;
+  };
+
+  const focusDatasetEntry = async (year, entry) => {
+    const map = mapRef.current;
+    if (!map) {
+      return;
+    }
+
+    scrollMapIntoView();
+
+    if (!activeYears.includes(year)) {
+      onToggleYear(year);
+    }
+
+    const payload = await fetchYearFeatures(year);
+    if (!payload) {
+      return;
+    }
+
+    if (entry.kind === "event") {
+      const event = (payload.events ?? []).find((item) => item.id === entry.id);
+      if (!event) {
+        return;
+      }
+
+      const boundsLayer = L.geoJSON(event.geometry);
+      const bounds = boundsLayer.getBounds();
+      if (bounds.isValid()) {
+        map.fitBounds(bounds, {
+          padding: [40, 40],
+          maxZoom: 17
+        });
+      }
+
+      openFeature({
+        id: event.id,
+        kind: "event",
+        title: event.title,
+        eventDate: event.eventDate,
+        durationMinutes: event.durationMinutes,
+        deviceUsed: event.deviceUsed,
+        deviceMode: event.deviceMode,
+        description: event.description,
+        images: event.images ?? []
+      });
+      return;
+    }
+
+    const find = (payload.finds ?? []).find((item) => item.id === entry.id);
+    if (!find) {
+      return;
+    }
+
+    map.setView([find.latitude, find.longitude], Math.max(map.getZoom(), 17), {
+      animate: true
+    });
+    openFeature({
+      id: find.id,
+      kind: "find",
+      title: find.title,
+      findDate: find.findDate,
+      ageLabel: find.ageLabel,
+      type: find.type,
+      metal: find.metal,
+      itemCount: find.itemCount,
+      description: find.description,
+      images: find.images ?? []
+    });
+  };
+
+  const focusProspectEntry = async (prospectId) => {
+    const map = mapRef.current;
+    if (!map) {
+      return;
+    }
+
+    scrollMapIntoView();
+
+    if (!prospectsActive) {
+      onToggleProspects();
+    }
+
+    const payload = await fetchProspectFeatures();
+    if (!payload) {
+      return;
+    }
+
+    const prospect = (payload.prospects ?? []).find((item) => item.id === prospectId);
+    if (!prospect) {
+      return;
+    }
+
+    map.setView([prospect.latitude, prospect.longitude], Math.max(map.getZoom(), 17), {
+      animate: true
+    });
+    openFeature({
+      id: prospect.id,
+      kind: "prospect",
+      title: prospect.title,
+      ageLabel: prospect.ageLabel,
+      dateVisited: prospect.dateVisited,
+      description: prospect.description,
+      images: prospect.images ?? []
+    });
   };
 
   const persistMapView = () => {
@@ -478,12 +620,10 @@ export default function TimeTravelMap({
           continue;
         }
 
-        const response = await fetch(`/api/datasets/features?year=${year}`);
-        if (cancelled || mapRef.current !== map || !map.getContainer() || !response.ok) {
+        const payload = await fetchYearFeatures(year);
+        if (cancelled || mapRef.current !== map || !map.getContainer() || !payload) {
           continue;
         }
-
-        const payload = await response.json();
         if (cancelled || mapRef.current !== map || !map.getContainer()) {
           return;
         }
@@ -546,12 +686,10 @@ export default function TimeTravelMap({
       }
 
       if (prospectsActive && !datasetLayerRefs.current.has("prospects")) {
-        const response = await fetch("/api/datasets/features?dataset=prospects");
-        if (cancelled || mapRef.current !== map || !map.getContainer() || !response.ok) {
+        const payload = await fetchProspectFeatures();
+        if (cancelled || mapRef.current !== map || !map.getContainer() || !payload) {
           return;
         }
-
-        const payload = await response.json();
         if (cancelled || mapRef.current !== map || !map.getContainer()) {
           return;
         }
@@ -561,8 +699,8 @@ export default function TimeTravelMap({
         for (const prospect of payload.prospects ?? []) {
           const marker = L.circleMarker([prospect.latitude, prospect.longitude], {
             radius: 8,
-            color: "#1f6f43",
-            fillColor: "#39a96b",
+            color: "#9a7a07",
+            fillColor: "#f0c419",
             fillOpacity: 0.92,
             weight: 2
           });
@@ -669,10 +807,17 @@ export default function TimeTravelMap({
       <DatasetsCard
         years={datasets?.years ?? []}
         prospectCount={datasets?.prospects?.count ?? 0}
+        prospectEntries={datasets?.prospects?.entries ?? []}
         loading={datasets?.loading}
         activeYears={activeYears}
         prospectsActive={prospectsActive}
         onToggleYear={onToggleYear}
+        onSelectEntry={(year, entry) => {
+          void focusDatasetEntry(year, entry);
+        }}
+        onSelectProspect={(prospectId) => {
+          void focusProspectEntry(prospectId);
+        }}
         onToggleProspects={onToggleProspects}
       />
 

@@ -48,7 +48,7 @@ export default function ClientMapPage() {
   );
   const [datasets, setDatasets] = useState({
     years: [],
-    prospects: { count: 0 },
+    prospects: { count: 0, entries: [] },
     loading: true
   });
 
@@ -66,7 +66,7 @@ export default function ClientMapPage() {
         if (!cancelled) {
           setDatasets({
             years: payload.years ?? [],
-            prospects: payload.prospects ?? { count: 0 },
+            prospects: payload.prospects ?? { count: 0, entries: [] },
             loading: false
           });
         }
@@ -74,7 +74,7 @@ export default function ClientMapPage() {
         if (!cancelled) {
           setDatasets({
             years: [],
-            prospects: { count: 0 },
+            prospects: { count: 0, entries: [] },
             loading: false
           });
         }
