@@ -42,7 +42,7 @@ export type CreateFeatureValues = {
 
 type CreateFeatureModalProps = {
   open: boolean;
-  mode: "event" | "find";
+  mode: "event" | "find" | "prospect";
   pointCount: number;
   onClose: () => void;
   onSubmit: (values: CreateFeatureValues) => Promise<void>;
@@ -73,14 +73,16 @@ function getInitialValues(): CreateFeatureValues {
 function Field({
   label,
   icon,
+  className = "",
   children
 }: {
   label: string;
   icon: ReactNode;
+  className?: string;
   children: ReactNode;
 }) {
   return (
-    <label className="grid gap-2">
+    <label className={`grid content-start gap-2 self-start ${className}`}>
       <span className="inline-flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.08em] text-[#6a7d88]">
         {icon}
         <span>{label}</span>
@@ -90,7 +92,7 @@ function Field({
   );
 }
 
-function getModalCopy(mode: "event" | "find", pointCount: number) {
+function getModalCopy(mode: "event" | "find" | "prospect", pointCount: number) {
   if (mode === "find") {
     return {
       eyebrow: "New Find",
@@ -99,6 +101,17 @@ function getModalCopy(mode: "event" | "find", pointCount: number) {
         pointCount > 0
           ? "Pin captured. Add the find details, then save it into the map."
           : "Click the map to place a find pin, then save its details."
+    };
+  }
+
+  if (mode === "prospect") {
+    return {
+      eyebrow: "New Prospect",
+      title: "Save Prospect Pin",
+      helper:
+        pointCount > 0
+          ? "Pin captured. Add the prospect details, then save it into the map."
+          : "Click the map to place a prospect pin, then save its details."
     };
   }
 
@@ -260,6 +273,8 @@ export default function CreateFeatureModal({
                 icon={
                   mode === "event" ? (
                     <MapPinned size={14} strokeWidth={2.1} />
+                  ) : mode === "prospect" ? (
+                    <MapPinned size={14} strokeWidth={2.1} />
                   ) : (
                     <Coins size={14} strokeWidth={2.1} />
                   )
@@ -268,7 +283,13 @@ export default function CreateFeatureModal({
                 <input
                   value={values.title}
                   onChange={(event) => updateValue("title", event.currentTarget.value)}
-                  placeholder={mode === "event" ? "South field after rain" : "1905 barber dime"}
+                  placeholder={
+                    mode === "event"
+                      ? "South field after rain"
+                      : mode === "prospect"
+                        ? "Old schoolyard"
+                        : "1905 barber dime"
+                  }
                   className="rounded-2xl border border-[rgba(21,49,63,0.12)] bg-white px-4 py-3 text-[15px] text-[#15313f] outline-none"
                   required
                 />
@@ -276,7 +297,15 @@ export default function CreateFeatureModal({
 
               <Field
                 label="Description"
-                icon={mode === "event" ? <Radar size={14} strokeWidth={2.1} /> : <Coins size={14} strokeWidth={2.1} />}
+                icon={
+                  mode === "event" ? (
+                    <Radar size={14} strokeWidth={2.1} />
+                  ) : mode === "prospect" ? (
+                    <MapPinned size={14} strokeWidth={2.1} />
+                  ) : (
+                    <Coins size={14} strokeWidth={2.1} />
+                  )
+                }
               >
                 <textarea
                   value={values.description}
@@ -284,6 +313,8 @@ export default function CreateFeatureModal({
                   placeholder={
                     mode === "event"
                       ? "Notes about the outing, conditions, permissions, and anything worth keeping."
+                      : mode === "prospect"
+                        ? "Notes about the site, access, clues, and why it looks promising."
                       : "Notes about the find, location context, and condition."
                   }
                   className="min-h-40 rounded-2xl border border-[rgba(21,49,63,0.12)] bg-white px-4 py-3 text-[15px] text-[#15313f] outline-none"
@@ -367,14 +398,14 @@ export default function CreateFeatureModal({
               </div>
             </div>
 
-            <div className="min-w-0 grid gap-4">
-              <Field label="Date" icon={<CalendarDays size={14} strokeWidth={2.1} />}>
+            <div className="min-w-0 content-start self-start grid gap-4">
+              <Field label={mode === "prospect" ? "Visited" : "Date"} icon={<CalendarDays size={14} strokeWidth={2.1} />}>
                 <input
                   type="date"
                   value={values.date}
                   onChange={(event) => updateValue("date", event.currentTarget.value)}
                   className="rounded-2xl border border-[rgba(21,49,63,0.12)] bg-white px-4 py-3 text-[15px] text-[#15313f] outline-none"
-                  required
+                  required={mode !== "prospect"}
                 />
               </Field>
 
@@ -430,7 +461,7 @@ export default function CreateFeatureModal({
                     </Field>
                   </div>
                 </>
-              ) : (
+              ) : mode === "find" ? (
                 <>
                   <Field label="Age" icon={<CalendarDays size={14} strokeWidth={2.1} />}>
                     <input
@@ -482,6 +513,18 @@ export default function CreateFeatureModal({
                     </Field>
                   </div>
                 </>
+              ) : (
+                <div className="grid content-start items-start gap-4 sm:grid-cols-2">
+                  <Field label="Age" icon={<CalendarDays size={14} strokeWidth={2.1} />}>
+                    <input
+                      value={values.ageLabel}
+                      onChange={(event) => updateValue("ageLabel", event.currentTarget.value)}
+                      placeholder="1800s or early 1900s"
+                      className="rounded-2xl border border-[rgba(21,49,63,0.12)] bg-white px-4 py-3 text-[15px] text-[#15313f] outline-none"
+                    />
+                  </Field>
+                  <div className="hidden sm:block" />
+                </div>
               )}
             </div>
           </div>
@@ -506,7 +549,11 @@ export default function CreateFeatureModal({
               className="inline-flex items-center gap-2 rounded-2xl bg-[#15313f] px-4 py-3 text-sm font-semibold text-white shadow-[0_14px_30px_rgba(21,49,63,0.2)]"
             >
               <Save size={16} strokeWidth={2.1} />
-              <span>{saving ? "Saving..." : `Save ${mode === "event" ? "Event" : "Find"}`}</span>
+              <span>
+                {saving
+                  ? "Saving..."
+                  : `Save ${mode === "event" ? "Event" : mode === "find" ? "Find" : "Prospect"}`}
+              </span>
             </button>
           </div>
         </form>

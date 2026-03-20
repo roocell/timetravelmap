@@ -9,6 +9,7 @@ import {
   EyeOff,
   Layers3,
   Map as MapIcon,
+  MapPinned,
   PencilRuler,
   Search,
   Undo2,
@@ -152,6 +153,103 @@ function createFindMarker(find) {
   return L.marker([find.latitude, find.longitude], { icon });
 }
 
+function createDraftVertexMarker(map, point, index, isLastPoint, onPreviewMove, onCommitMove) {
+  const icon = L.divIcon({
+    className: "",
+    html: `<div style="display:flex;height:16px;width:16px;align-items:center;justify-content:center;border-radius:9999px;border:2px solid #15313f;background:${isLastPoint ? "#f0c419" : "#ffffff"};box-shadow:0 4px 10px rgba(21,49,63,0.18);"></div>`,
+    iconSize: [16, 16],
+    iconAnchor: [8, 8]
+  });
+
+  const marker = L.marker([point.lat, point.lng], {
+    draggable: true,
+    icon,
+    zIndexOffset: 1000
+  });
+
+  marker.on("dragstart", () => {
+    map.dragging?.disable();
+  });
+
+  marker.on("drag", (event) => {
+    const latLng = event.target.getLatLng();
+    onPreviewMove(index, latLng);
+  });
+
+  marker.on("dragend", (event) => {
+    const latLng = event.target.getLatLng();
+    onCommitMove(index, latLng);
+    map.dragging?.enable();
+  });
+
+  marker.on("click", (event) => {
+    L.DomEvent.stopPropagation(event);
+  });
+
+  marker.on("mousedown", (event) => {
+    L.DomEvent.stopPropagation(event);
+  });
+
+  marker.on("touchstart", (event) => {
+    L.DomEvent.stopPropagation(event);
+  });
+
+  return marker;
+}
+
+function createDraftPointMarker(map, point, kind, onPreviewMove, onCommitMove) {
+  const colors =
+    kind === "prospect"
+      ? {
+          border: "#9a7a07",
+          fill: "#f0c419"
+        }
+      : {
+          border: "#1f6f43",
+          fill: "#39a96b"
+        };
+
+  const icon = L.divIcon({
+    className: "",
+    html: `<div style="display:flex;height:20px;width:20px;align-items:center;justify-content:center;border-radius:9999px;border:3px solid ${colors.border};background:${colors.fill};box-shadow:0 4px 12px rgba(21,49,63,0.22);"></div>`,
+    iconSize: [20, 20],
+    iconAnchor: [10, 10]
+  });
+
+  const marker = L.marker([point.lat, point.lng], {
+    draggable: true,
+    icon,
+    zIndexOffset: 1000
+  });
+
+  marker.on("dragstart", () => {
+    map.dragging?.disable();
+  });
+
+  marker.on("drag", (event) => {
+    onPreviewMove(event.target.getLatLng());
+  });
+
+  marker.on("dragend", (event) => {
+    onCommitMove(event.target.getLatLng());
+    map.dragging?.enable();
+  });
+
+  marker.on("click", (event) => {
+    L.DomEvent.stopPropagation(event);
+  });
+
+  marker.on("mousedown", (event) => {
+    L.DomEvent.stopPropagation(event);
+  });
+
+  marker.on("touchstart", (event) => {
+    L.DomEvent.stopPropagation(event);
+  });
+
+  return marker;
+}
+
 function createEventFeatureLayer(event, openFeature) {
   const geoJsonLayer = L.geoJSON(event.geometry, {
     style: {
@@ -163,17 +261,21 @@ function createEventFeatureLayer(event, openFeature) {
     }
   });
 
-  geoJsonLayer.on("click", () => {
-    openFeature({
-      id: event.id,
-      kind: "event",
-      title: event.title,
-      eventDate: event.eventDate,
-      durationMinutes: event.durationMinutes,
-      deviceUsed: event.deviceUsed,
-      deviceMode: event.deviceMode,
-      description: event.description,
-      images: event.images ?? []
+  geoJsonLayer.eachLayer((layer) => {
+    layer.on("click", (clickEvent) => {
+      L.DomEvent.stopPropagation(clickEvent);
+      openFeature({
+        id: event.id,
+        kind: "event",
+        title: event.title,
+        eventDate: event.eventDate,
+        durationMinutes: event.durationMinutes,
+        deviceUsed: event.deviceUsed,
+        deviceMode: event.deviceMode,
+        description: event.description,
+        geometry: event.geometry,
+        images: event.images ?? []
+      });
     });
   });
 
@@ -183,7 +285,8 @@ function createEventFeatureLayer(event, openFeature) {
 function createFindFeatureLayer(find, openFeature) {
   const marker = createFindMarker(find);
 
-  marker.on("click", () => {
+  marker.on("click", (clickEvent) => {
+    L.DomEvent.stopPropagation(clickEvent);
     openFeature({
       id: find.id,
       kind: "find",
@@ -193,12 +296,28 @@ function createFindFeatureLayer(find, openFeature) {
       type: find.type,
       metal: find.metal,
       itemCount: find.itemCount,
+      latitude: find.latitude,
+      longitude: find.longitude,
       description: find.description,
       images: find.images ?? []
     });
   });
 
   return marker;
+}
+
+function getFeatureDatasetKey(feature) {
+  if (!feature) {
+    return null;
+  }
+
+  if (feature.kind === "prospect") {
+    return "prospects";
+  }
+
+  const dateValue = feature.kind === "event" ? feature.eventDate : feature.findDate;
+  const year = Number.parseInt(String(dateValue ?? "").slice(0, 4), 10);
+  return Number.isFinite(year) ? `year:${year}` : null;
 }
 
 function loadSavedMapView() {
@@ -248,13 +367,14 @@ export default function TimeTravelMap({
   const yearFeaturesCacheRef = useRef(new Map());
   const featureOverridesRef = useRef({});
   const creationModeRef = useRef(null);
+  const modalOpenRef = useRef(false);
   const mapRef = useRef(null);
   const markerRef = useRef(null);
   const currentLocationMarkerRef = useRef(null);
   const currentLayerIndexRef = useRef(1);
   const sliderValueRef = useRef(1);
   const geolocationIntervalRef = useRef(null);
-  const [zoomLabel, setZoomLabel] = useState(`Zoom: ${MIN_NATIVE_ZOOM}`);
+  const [zoomLabel, setZoomLabel] = useState(MIN_NATIVE_ZOOM);
   const [layersVisible, setLayersVisible] = useState(true);
   const [sliderValue, setSliderValue] = useState(1);
   const [selectedFeature, setSelectedFeature] = useState(null);
@@ -263,6 +383,8 @@ export default function TimeTravelMap({
   const [creationMode, setCreationMode] = useState(null);
   const [draftPoints, setDraftPoints] = useState([]);
   const [showCreateFeatureModal, setShowCreateFeatureModal] = useState(false);
+  const [editingFeature, setEditingFeature] = useState(null);
+  const previousEditingDatasetKeyRef = useRef(null);
 
   useEffect(() => {
     featureOverridesRef.current = featureOverrides;
@@ -271,6 +393,10 @@ export default function TimeTravelMap({
   useEffect(() => {
     creationModeRef.current = creationMode;
   }, [creationMode]);
+
+  useEffect(() => {
+    modalOpenRef.current = Boolean(selectedFeature || showCreateFeatureModal);
+  }, [selectedFeature, showCreateFeatureModal]);
 
   const openFeature = (feature) => {
     const overrideKey = `${feature.kind}:${feature.id}`;
@@ -281,6 +407,7 @@ export default function TimeTravelMap({
     setDraftPoints([]);
     setShowCreateFeatureModal(false);
     setCreationMode(null);
+    setEditingFeature(null);
   };
 
   const startEventDraw = () => {
@@ -297,16 +424,80 @@ export default function TimeTravelMap({
     setCreationMode("find");
   };
 
+  const startProspectDraw = () => {
+    setSelectedFeature(null);
+    setShowCreateFeatureModal(false);
+    setDraftPoints([]);
+    setCreationMode("prospect");
+  };
+
+  const beginFeatureMove = (feature) => {
+    if (feature.kind === "event") {
+      const geometry = feature.geometry;
+      const ring =
+        geometry?.type === "MultiPolygon"
+          ? geometry.coordinates?.[0]?.[0]
+          : geometry?.type === "Polygon"
+            ? geometry.coordinates?.[0]
+            : null;
+      if (!Array.isArray(ring)) {
+        return;
+      }
+
+      const points = ring
+        .map((coordinate) => {
+          if (!Array.isArray(coordinate) || coordinate.length < 2) {
+            return null;
+          }
+
+          return {
+            lat: Number(coordinate[1]),
+            lng: Number(coordinate[0])
+          };
+        })
+        .filter(Boolean);
+
+      if (points.length > 1) {
+        const first = points[0];
+        const last = points[points.length - 1];
+        if (first && last && first.lat === last.lat && first.lng === last.lng) {
+          points.pop();
+        }
+      }
+
+      setDraftPoints(points);
+      setEditingFeature(feature);
+      setCreationMode("event");
+      return;
+    }
+
+    if (feature.latitude != null && feature.longitude != null) {
+      setDraftPoints([
+        {
+          lat: feature.latitude,
+          lng: feature.longitude
+        }
+      ]);
+      setEditingFeature(feature);
+      setCreationMode(feature.kind);
+    }
+  };
+
   const undoDraftPoint = () => {
     setDraftPoints((current) => current.slice(0, -1));
   };
 
   const finishDraft = () => {
+    if (editingFeature) {
+      void saveEditedFeatureGeometry();
+      return;
+    }
+
     if (creationMode === "event" && draftPoints.length < 3) {
       return;
     }
 
-    if (creationMode === "find" && draftPoints.length < 1) {
+    if ((creationMode === "find" || creationMode === "prospect") && draftPoints.length < 1) {
       return;
     }
 
@@ -391,6 +582,7 @@ export default function TimeTravelMap({
         deviceUsed: event.deviceUsed,
         deviceMode: event.deviceMode,
         description: event.description,
+        geometry: event.geometry,
         images: event.images ?? []
       });
       return;
@@ -413,6 +605,8 @@ export default function TimeTravelMap({
       type: find.type,
       metal: find.metal,
       itemCount: find.itemCount,
+      latitude: find.latitude,
+      longitude: find.longitude,
       description: find.description,
       images: find.images ?? []
     });
@@ -449,6 +643,8 @@ export default function TimeTravelMap({
       title: prospect.title,
       ageLabel: prospect.ageLabel,
       dateVisited: prospect.dateVisited,
+      latitude: prospect.latitude,
+      longitude: prospect.longitude,
       description: prospect.description,
       images: prospect.images ?? []
     });
@@ -631,7 +827,7 @@ export default function TimeTravelMap({
         return;
       }
 
-      if (creationModeRef.current === "find") {
+      if (creationModeRef.current === "find" || creationModeRef.current === "prospect") {
         setDraftPoints([
           {
             lat: event.latlng.lat,
@@ -650,10 +846,8 @@ export default function TimeTravelMap({
       markerRef.current = L.marker([clickLat, clickLng]).addTo(map);
 
       const shareZoom = Math.min(map.getZoom(), MAX_NATIVE_ZOOM);
-      const shareUrl = `${window.location.origin}/?lat=${clickLat}&lng=${clickLng}&z=${shareZoom}&l=${currentLayerIndexRef.current}`;
       const popupHtml = [
         `${clickLat},<br>${clickLng}`,
-        `<a href="${shareUrl}">TTM Link</a>`,
         `<a href="https://www.google.com/maps/place/${clickLat},${clickLng}" target="_blank" rel="noreferrer">Google Maps Link</a>`
       ].join("<br>");
 
@@ -662,7 +856,7 @@ export default function TimeTravelMap({
 
     map.on("click", handleMapClick);
     map.on("zoom", () => {
-      setZoomLabel(`Zoom: ${map.getZoom()}`);
+      setZoomLabel(map.getZoom());
     });
     map.on("moveend", persistMapView);
     map.on("zoomend", persistMapView);
@@ -670,13 +864,17 @@ export default function TimeTravelMap({
 
     ensureLayer(initialLayerIndex);
     setActiveLayerOpacities(initialLayerIndex, true);
-    setZoomLabel(`Zoom: ${map.getZoom()}`);
+    setZoomLabel(map.getZoom());
     persistMapView();
     showCurrentLocation();
     geolocationIntervalRef.current = window.setInterval(showCurrentLocation, 5000);
 
     const handleKeyDown = (event) => {
       if (event.code !== "Space") {
+        return;
+      }
+
+      if (modalOpenRef.current) {
         return;
       }
 
@@ -720,6 +918,34 @@ export default function TimeTravelMap({
       return;
     }
 
+    const nextKey = getFeatureDatasetKey(editingFeature);
+    const previousKey = previousEditingDatasetKeyRef.current;
+
+    if (previousKey && previousKey !== nextKey) {
+      const previousLayer = datasetLayerRefs.current.get(previousKey);
+      if (previousLayer) {
+        map.removeLayer(previousLayer);
+        datasetLayerRefs.current.delete(previousKey);
+      }
+    }
+
+    if (nextKey) {
+      const currentLayer = datasetLayerRefs.current.get(nextKey);
+      if (currentLayer) {
+        map.removeLayer(currentLayer);
+        datasetLayerRefs.current.delete(nextKey);
+      }
+    }
+
+    previousEditingDatasetKeyRef.current = nextKey;
+  }, [editingFeature]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) {
+      return;
+    }
+
     if (!drawingLayerRef.current) {
       drawingLayerRef.current = L.layerGroup().addTo(map);
     }
@@ -742,8 +968,9 @@ export default function TimeTravelMap({
       });
       layer.addLayer(line);
 
+      let polygon = null;
       if (draftPoints.length >= 3) {
-        const polygon = L.polygon(latLngs, {
+        polygon = L.polygon(latLngs, {
           color: "#0f5e7d",
           weight: 3,
           fillColor: "#8cc9de",
@@ -751,32 +978,59 @@ export default function TimeTravelMap({
         });
         layer.addLayer(polygon);
       }
+
+      draftPoints.forEach((point, index) => {
+        createDraftVertexMarker(
+          map,
+          point,
+          index,
+          index === draftPoints.length - 1,
+          (pointIndex, latLng) => {
+            const nextLatLngs = latLngs.map((entry, entryIndex) =>
+              entryIndex === pointIndex ? [latLng.lat, latLng.lng] : entry
+            );
+            line.setLatLngs(nextLatLngs);
+            polygon?.setLatLngs(nextLatLngs);
+          },
+          (pointIndex, latLng) => {
+            setDraftPoints((current) =>
+              current.map((entry, entryIndex) =>
+                entryIndex === pointIndex
+                  ? {
+                      lat: latLng.lat,
+                      lng: latLng.lng
+                    }
+                  : entry
+              )
+            );
+          }
+        ).addTo(layer);
+      });
     }
 
-    if (creationMode === "find" && draftPoints[0]) {
+    if ((creationMode === "find" || creationMode === "prospect") && draftPoints[0]) {
       const point = draftPoints[0];
-      const marker = L.circleMarker([point.lat, point.lng], {
-        radius: 9,
-        color: "#1f6f43",
-        fillColor: "#39a96b",
-        fillOpacity: 0.95,
-        weight: 3
-      });
-      layer.addLayer(marker);
+      createDraftPointMarker(
+        map,
+        point,
+        creationMode,
+        (latLng) => {
+          const draftMarker = layer.getLayers().find((entry) => entry instanceof L.Marker);
+          if (draftMarker instanceof L.Marker) {
+            draftMarker.setLatLng(latLng);
+          }
+        },
+        (latLng) => {
+          setDraftPoints([
+            {
+              lat: latLng.lat,
+              lng: latLng.lng
+            }
+          ]);
+        }
+      ).addTo(layer);
     }
 
-    draftPoints.forEach((point, index) => {
-      const marker = L.circleMarker([point.lat, point.lng], {
-        radius: creationMode === "find" ? 0 : 6,
-        color: "#15313f",
-        fillColor: index === draftPoints.length - 1 ? "#f0c419" : "#ffffff",
-        fillOpacity: 1,
-        weight: 2
-      });
-      if (creationMode !== "find") {
-        layer.addLayer(marker);
-      }
-    });
   }, [creationMode, draftPoints]);
 
   const invalidateYear = (year) => {
@@ -798,6 +1052,65 @@ export default function TimeTravelMap({
     }
   };
 
+  const refreshProspects = () => {
+    yearFeaturesCacheRef.current.delete("prospects");
+    const existingLayer = datasetLayerRefs.current.get("prospects");
+    if (existingLayer && mapRef.current) {
+      mapRef.current.removeLayer(existingLayer);
+      datasetLayerRefs.current.delete("prospects");
+    }
+
+    if (prospectsActive) {
+      setDatasetRefreshToken((current) => current + 1);
+    }
+  };
+
+  const appendProspectToActiveLayer = (prospect) => {
+    const layerGroup = datasetLayerRefs.current.get("prospects");
+    if (!layerGroup) {
+      return;
+    }
+
+    const marker = L.circleMarker([prospect.latitude, prospect.longitude], {
+      radius: 8,
+      color: "#9a7a07",
+      fillColor: "#f0c419",
+      fillOpacity: 0.92,
+      weight: 2
+    });
+
+    marker.bindTooltip(
+      [
+        `<strong>${prospect.title}</strong>`,
+        `${prospect.latitude}, ${prospect.longitude}`,
+        `<a href="https://www.google.com/maps/place/${prospect.latitude},${prospect.longitude}" target="_blank" rel="noreferrer">Google Maps Link</a>`
+      ].join("<br>"),
+      {
+        direction: "top",
+        offset: [0, -8],
+        opacity: 0.95,
+        interactive: true
+      }
+    );
+
+    marker.on("click", (clickEvent) => {
+      L.DomEvent.stopPropagation(clickEvent);
+      openFeature({
+        id: prospect.id,
+        kind: "prospect",
+        title: prospect.title,
+        ageLabel: prospect.ageLabel,
+        dateVisited: prospect.dateVisited,
+        latitude: prospect.latitude,
+        longitude: prospect.longitude,
+        description: prospect.description,
+        images: prospect.images ?? []
+      });
+    });
+
+    marker.addTo(layerGroup);
+  };
+
   const appendFeatureToActiveYear = (year, feature) => {
     const layerGroup = datasetLayerRefs.current.get(`year:${year}`);
     if (!layerGroup) {
@@ -810,6 +1123,69 @@ export default function TimeTravelMap({
     }
 
     createFindFeatureLayer(feature, openFeature).addTo(layerGroup);
+  };
+
+  const saveEditedFeatureGeometry = async () => {
+    if (!editingFeature) {
+      return;
+    }
+
+    const payload =
+      editingFeature.kind === "event"
+        ? { points: draftPoints }
+        : {
+            latitude: draftPoints[0]?.lat,
+            longitude: draftPoints[0]?.lng
+          };
+
+    const response = await fetch(`/api/features/${editingFeature.kind}/${editingFeature.id}`, {
+      method: "PATCH",
+      headers: {
+        "content-type": "application/json"
+      },
+      body: JSON.stringify(payload)
+    });
+
+    const body = await response.json().catch(() => null);
+    if (!response.ok) {
+      throw new Error(body?.error ?? "Failed to update geometry");
+    }
+
+    const updatedFeature = body?.feature;
+    if (!updatedFeature) {
+      throw new Error("Missing updated feature");
+    }
+
+    setFeatureOverrides((current) => ({
+      ...current,
+      [`${updatedFeature.kind}:${updatedFeature.id}`]: {
+        ...(current[`${updatedFeature.kind}:${updatedFeature.id}`] ?? {}),
+        ...updatedFeature,
+        geometry: editingFeature.kind === "event" ? {
+          type: "Polygon",
+          coordinates: [[
+            ...draftPoints.map((point) => [point.lng, point.lat]),
+            [draftPoints[0].lng, draftPoints[0].lat]
+          ]]
+        } : undefined,
+        latitude: editingFeature.kind !== "event" ? draftPoints[0]?.lat : undefined,
+        longitude: editingFeature.kind !== "event" ? draftPoints[0]?.lng : undefined
+      }
+    }));
+
+    if (editingFeature.kind === "prospect") {
+      refreshProspects();
+      void onDatasetsChanged();
+    } else {
+      const dateValue = editingFeature.kind === "event" ? editingFeature.eventDate : editingFeature.findDate;
+      const year = Number.parseInt(String(dateValue ?? "").slice(0, 4), 10);
+      if (Number.isFinite(year)) {
+        refreshYear(year);
+      }
+      void onDatasetsChanged();
+    }
+
+    clearDraft();
   };
 
   const createEvent = async (values) => {
@@ -923,6 +1299,52 @@ export default function TimeTravelMap({
       return;
     }
 
+    if (creationMode === "prospect") {
+      const response = await fetch("/api/features/prospect", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json"
+        },
+        body: JSON.stringify({
+          title: values.title,
+          date: values.date,
+          ageLabel: values.ageLabel,
+          description: values.description,
+          images: values.images,
+          point: draftPoints[0]
+        })
+      });
+
+      const body = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new Error(body?.error ?? "Failed to create prospect");
+      }
+
+      const prospect = body?.prospect;
+      if (!prospect) {
+        throw new Error("Missing prospect payload");
+      }
+
+      appendProspectToActiveLayer(prospect);
+      refreshProspects();
+      void onDatasetsChanged();
+      setFeatureOverrides((current) => ({
+        ...current,
+        [`prospect:${prospect.id}`]: prospect
+      }));
+      openFeature(prospect);
+      clearDraft();
+
+      if (mapRef.current) {
+        mapRef.current.setView(
+          [prospect.latitude, prospect.longitude],
+          Math.max(mapRef.current.getZoom(), 17),
+          { animate: true }
+        );
+      }
+      return;
+    }
+
     await createEvent(values);
   };
 
@@ -973,11 +1395,15 @@ export default function TimeTravelMap({
 
         const layerGroup = L.layerGroup();
 
-        for (const event of payload.events ?? []) {
+        for (const event of (payload.events ?? []).filter(
+          (feature) => !(editingFeature?.kind === "event" && editingFeature.id === feature.id)
+        )) {
           createEventFeatureLayer(event, openFeature).addTo(layerGroup);
         }
 
-        for (const find of payload.finds ?? []) {
+        for (const find of (payload.finds ?? []).filter(
+          (feature) => !(editingFeature?.kind === "find" && editingFeature.id === feature.id)
+        )) {
           createFindFeatureLayer(find, openFeature).addTo(layerGroup);
         }
 
@@ -1000,7 +1426,9 @@ export default function TimeTravelMap({
 
         const layerGroup = L.layerGroup();
 
-        for (const prospect of payload.prospects ?? []) {
+        for (const prospect of (payload.prospects ?? []).filter(
+          (feature) => !(editingFeature?.kind === "prospect" && editingFeature.id === feature.id)
+        )) {
           const marker = L.circleMarker([prospect.latitude, prospect.longitude], {
             radius: 8,
             color: "#9a7a07",
@@ -1009,13 +1437,30 @@ export default function TimeTravelMap({
             weight: 2
           });
 
-          marker.on("click", () => {
+          marker.bindTooltip(
+            [
+              `<strong>${prospect.title}</strong>`,
+              `${prospect.latitude}, ${prospect.longitude}`,
+              `<a href="https://www.google.com/maps/place/${prospect.latitude},${prospect.longitude}" target="_blank" rel="noreferrer">Google Maps Link</a>`
+            ].join("<br>"),
+            {
+            direction: "top",
+            offset: [0, -8],
+            opacity: 0.95,
+            interactive: true
+          }
+          );
+
+          marker.on("click", (clickEvent) => {
+            L.DomEvent.stopPropagation(clickEvent);
             openFeature({
               id: prospect.id,
               kind: "prospect",
               title: prospect.title,
               ageLabel: prospect.ageLabel,
               dateVisited: prospect.dateVisited,
+              latitude: prospect.latitude,
+              longitude: prospect.longitude,
               description: prospect.description,
               images: prospect.images ?? []
             });
@@ -1037,15 +1482,12 @@ export default function TimeTravelMap({
     return () => {
       cancelled = true;
     };
-  }, [activeYears, datasetRefreshToken, prospectsActive]);
+  }, [activeYears, datasetRefreshToken, editingFeature, prospectsActive]);
 
   return (
     <main className="min-h-screen bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.7),transparent_45%),linear-gradient(180deg,#dce8ef_0%,#c3d2db_100%)] p-8 max-[700px]:p-4">
       <section className="mx-auto mb-5 flex max-w-[1400px] items-end justify-between gap-6 max-[700px]:mb-4 max-[700px]:flex-col max-[700px]:items-start">
         <div>
-          <p className="mb-1.5 text-[12px] font-bold uppercase tracking-[0.16em] text-[#6a7d88]">
-            Ottawa Layers
-          </p>
           <div className="flex items-center gap-3.5">
             <span className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-b from-[#eaf1f5] to-[#d6e2e8] text-[#15313f] shadow-[inset_0_1px_0_rgba(255,255,255,0.65)]">
               <MapIcon size={24} strokeWidth={2.1} />
@@ -1055,28 +1497,31 @@ export default function TimeTravelMap({
             </h1>
           </div>
         </div>
-        <p className="m-0 max-w-[460px] text-[14px] leading-[1.5] text-[#526773]">
-          Crossfade historical imagery, then switch into imported field data
-          sets from the KML archive below.
-        </p>
       </section>
 
       <Card className="mx-auto max-w-[1400px]">
-        <div className="m-0 flex items-center justify-between gap-4 border-b border-[rgba(21,49,63,0.08)] bg-gradient-to-b from-[rgba(240,246,249,0.96)] to-[rgba(232,239,243,0.96)] px-4 py-[14px] max-[700px]:flex-col max-[700px]:items-stretch max-[700px]:p-3">
-          <div className="flex min-w-0 items-center gap-3 max-[700px]:justify-between">
+        <div className="m-0 flex items-center justify-between gap-4 border-b border-[rgba(21,49,63,0.08)] bg-gradient-to-b from-[rgba(240,246,249,0.96)] to-[rgba(232,239,243,0.96)] px-4 py-[14px] max-[700px]:gap-3 max-[700px]:p-3">
+          <div className="flex min-w-0 items-center gap-3 max-[700px]:hidden">
             <div className="inline-flex items-center gap-2.5 text-[12px] font-bold uppercase tracking-[0.08em] text-[#5a6d78]">
               <Layers3 size={15} strokeWidth={2.2} />
               <span>Map Controls</span>
             </div>
           </div>
 
-          <div className="flex min-w-0 items-center gap-3 max-[700px]:justify-between">
+          <div className="flex min-w-0 flex-1 items-center justify-between gap-3 max-[700px]:items-center">
+            <div className="flex min-w-0 items-center gap-3 max-[700px]:flex-1 max-[700px]:gap-2">
             {creationMode ? (
               <>
-                <div className="rounded-[10px] border border-[rgba(21,49,63,0.12)] bg-[rgba(255,255,255,0.78)] px-3 py-2 text-[13px] font-semibold text-[#526773]">
-                  {creationMode === "event"
-                    ? "Click map to add polygon points"
-                    : "Click map to place a find pin"}
+                <div className="rounded-[10px] border border-[rgba(21,49,63,0.12)] bg-[rgba(255,255,255,0.78)] px-3 py-2 text-[13px] font-semibold text-[#526773] max-[700px]:hidden">
+                  {editingFeature
+                    ? editingFeature.kind === "event"
+                      ? "Adjust polygon points, then save shape"
+                      : "Click map to move the pin, then save"
+                    : creationMode === "event"
+                      ? "Click map to add polygon points"
+                      : creationMode === "prospect"
+                        ? "Click map to place a prospect pin"
+                        : "Click map to place a find pin"}
                 </div>
 
                 <Button
@@ -1087,7 +1532,7 @@ export default function TimeTravelMap({
                   className="inline-flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   <Undo2 size={15} strokeWidth={2.2} />
-                  <span>Undo</span>
+                  <span className="max-[700px]:sr-only">Undo</span>
                 </Button>
 
                 <Button
@@ -1099,7 +1544,17 @@ export default function TimeTravelMap({
                   className="inline-flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   <Check size={15} strokeWidth={2.2} />
-                  <span>{creationMode === "event" ? "Finish Event" : "Save Find"}</span>
+                  <span className="max-[700px]:sr-only">
+                    {editingFeature
+                      ? editingFeature.kind === "event"
+                        ? "Save Shape"
+                        : "Save Move"
+                      : creationMode === "event"
+                        ? "Finish Event"
+                        : creationMode === "prospect"
+                          ? "Save Prospect"
+                          : "Save Find"}
+                  </span>
                 </Button>
 
                 <Button
@@ -1109,7 +1564,7 @@ export default function TimeTravelMap({
                   className="inline-flex items-center gap-2"
                 >
                   <X size={15} strokeWidth={2.2} />
-                  <span>Cancel</span>
+                  <span className="max-[700px]:sr-only">Cancel</span>
                 </Button>
               </>
             ) : (
@@ -1120,7 +1575,7 @@ export default function TimeTravelMap({
                   className="inline-flex items-center gap-2"
                 >
                   <PencilRuler size={15} strokeWidth={2.2} />
-                  <span>New Event</span>
+                  <span className="max-[700px]:sr-only">New Event</span>
                 </Button>
 
                 <Button
@@ -1129,19 +1584,19 @@ export default function TimeTravelMap({
                   className="inline-flex items-center gap-2"
                 >
                   <Coins size={15} strokeWidth={2.2} />
-                  <span>New Find</span>
+                  <span className="max-[700px]:sr-only">New Find</span>
+                </Button>
+
+                <Button
+                  type="button"
+                  onClick={startProspectDraw}
+                  className="inline-flex items-center gap-2"
+                >
+                  <MapPinned size={15} strokeWidth={2.2} />
+                  <span className="max-[700px]:sr-only">New Prospect</span>
                 </Button>
               </>
             )}
-
-            <Button
-              type="button"
-              variant="ghost"
-              className="inline-flex items-center gap-2"
-            >
-              <Search size={15} strokeWidth={2.2} />
-              <span>{zoomLabel}</span>
-            </Button>
 
             <Button
               type="button"
@@ -1153,8 +1608,16 @@ export default function TimeTravelMap({
               ) : (
                 <EyeOff size={15} strokeWidth={2.2} />
               )}
-              <span>{layersVisible ? "Hide Layers" : "Show Layers"}</span>
+              <span className="max-[700px]:sr-only">
+                {layersVisible ? "Hide Layers" : "Show Layers"}
+              </span>
             </Button>
+            </div>
+
+            <div className="ml-auto inline-flex shrink-0 items-center gap-2 rounded-full border border-[rgba(21,49,63,0.08)] bg-[rgba(255,255,255,0.52)] px-3 py-2 text-[12px] font-bold uppercase tracking-[0.08em] text-[#5a6d78] max-[700px]:hidden">
+              <Search size={15} strokeWidth={2.2} />
+              <span>{zoomLabel}</span>
+            </div>
           </div>
         </div>
 
@@ -1198,11 +1661,35 @@ export default function TimeTravelMap({
             [`${feature.kind}:${feature.id}`]: feature
           }));
         }}
+        onFeatureDelete={(feature) => {
+          setSelectedFeature(null);
+          setFeatureOverrides((current) => {
+            const next = { ...current };
+            delete next[`${feature.kind}:${feature.id}`];
+            return next;
+          });
+
+          if (feature.kind === "prospect") {
+            refreshProspects();
+            void onDatasetsChanged();
+            return;
+          }
+
+          const dateValue = feature.kind === "event" ? feature.eventDate : feature.findDate;
+          const year = Number.parseInt(String(dateValue ?? "").slice(0, 4), 10);
+          if (Number.isFinite(year)) {
+            refreshYear(year);
+          }
+          void onDatasetsChanged();
+        }}
+        onFeatureMove={(feature) => {
+          void beginFeatureMove(feature);
+        }}
       />
 
       <CreateFeatureModal
         open={showCreateFeatureModal}
-        mode={creationMode === "find" ? "find" : "event"}
+        mode={creationMode === "find" ? "find" : creationMode === "prospect" ? "prospect" : "event"}
         pointCount={draftPoints.length}
         onClose={() => setShowCreateFeatureModal(false)}
         onSubmit={createFeature}

@@ -1,6 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { FindType, MetalCode } from "@prisma/client";
+import { FindType, MetalCode, Prisma } from "@prisma/client";
 import { NextRequest, NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
@@ -73,6 +73,44 @@ function serializeImages(
     altText: row.image.altText,
     caption: row.caption
   }));
+}
+
+function normalizePolygon(points: unknown) {
+  if (!Array.isArray(points) || points.length < 3) {
+    return null;
+  }
+
+  const ring = points
+    .map((point) => {
+      const latitude = Number((point as { lat?: unknown })?.lat);
+      const longitude = Number((point as { lng?: unknown })?.lng);
+
+      if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+        return null;
+      }
+
+      return [longitude, latitude];
+    })
+    .filter(Boolean) as number[][];
+
+  if (ring.length < 3) {
+    return null;
+  }
+
+  const first = ring[0];
+  const last = ring[ring.length - 1];
+  if (!first || !last) {
+    return null;
+  }
+
+  if (first[0] !== last[0] || first[1] !== last[1]) {
+    ring.push([first[0], first[1]]);
+  }
+
+  return {
+    type: "Polygon",
+    coordinates: [ring]
+  };
 }
 
 async function readFeature(prisma: Awaited<typeof import("../../../../../lib/prisma")>["prisma"], kind: FeatureKind, id: string) {
@@ -384,6 +422,31 @@ export async function PATCH(
           data
         });
       }
+
+      if ("points" in body) {
+        const geometry = normalizePolygon(body.points);
+        if (!geometry) {
+          throw new Error("A valid polygon is required");
+        }
+
+        await prisma.$executeRaw(
+          Prisma.sql`
+            update timetravelmap.events
+            set area = ST_Multi(
+              ST_CollectionExtract(
+                ST_MakeValid(
+                  ST_SetSRID(
+                    ST_GeomFromGeoJSON(${JSON.stringify(geometry)}),
+                    4326
+                  )
+                ),
+                3
+              )
+            )
+            where id = ${id}::uuid
+          `
+        );
+      }
     }
 
     if (rawKind === "find") {
@@ -396,6 +459,8 @@ export async function PATCH(
       if ("type" in body) data.type = toFindType(body.type) ?? FindType.other;
       if ("metal" in body) data.metal = body.metal ? toMetalCode(body.metal) : null;
       if ("itemCount" in body) data.itemCount = toNullableNumber(body.itemCount);
+      if ("latitude" in body) data.latitude = toNullableNumber(body.latitude);
+      if ("longitude" in body) data.longitude = toNullableNumber(body.longitude);
 
       if (Object.keys(data).length > 0) {
         await prisma.find.update({
@@ -412,6 +477,8 @@ export async function PATCH(
       if ("description" in body) data.description = toNullableString(body.description);
       if ("ageLabel" in body) data.ageLabel = toNullableString(body.ageLabel);
       if ("dateVisited" in body) data.dateVisited = toDate(body.dateVisited);
+      if ("latitude" in body) data.latitude = toNullableNumber(body.latitude);
+      if ("longitude" in body) data.longitude = toNullableNumber(body.longitude);
 
       if (Object.keys(data).length > 0) {
         await prisma.prospect.update({
@@ -437,6 +504,98 @@ export async function PATCH(
     return NextResponse.json({ feature });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to update feature";
+    return NextResponse.json({ error: message }, { status: 400 });
+  }
+}
+
+async function cleanupOrphanedImage(
+  prisma: Awaited<typeof import("../../../../../lib/prisma")>["prisma"],
+  image: { id: string; storagePath: string }
+) {
+  const [eventRefs, findRefs, prospectRefs] = await Promise.all([
+    prisma.eventImage.count({
+      where: { imageId: image.id }
+    }),
+    prisma.findImage.count({
+      where: { imageId: image.id }
+    }),
+    prisma.prospectImage.count({
+      where: { imageId: image.id }
+    })
+  ]);
+
+  if (eventRefs + findRefs + prospectRefs > 0) {
+    return;
+  }
+
+  await prisma.image.delete({
+    where: { id: image.id }
+  });
+
+  const relativePath = image.storagePath.replace(/^\/+/, "");
+  const filePath = path.join(PUBLIC_ROOT, relativePath);
+  const resolvedPath = path.resolve(filePath);
+
+  if (!resolvedPath.startsWith(PUBLIC_ROOT + path.sep) && resolvedPath !== PUBLIC_ROOT) {
+    throw new Error("Refusing to delete file outside public directory");
+  }
+
+  await fs.unlink(resolvedPath).catch((error: NodeJS.ErrnoException) => {
+    if (error.code !== "ENOENT") {
+      throw error;
+    }
+  });
+}
+
+export async function DELETE(
+  _request: NextRequest,
+  context: { params: Promise<{ kind: string; id: string }> }
+) {
+  const { prisma } = await import("../../../../../lib/prisma");
+  const { kind: rawKind, id } = await context.params;
+
+  if (!isFeatureKind(rawKind)) {
+    return NextResponse.json({ error: "Invalid feature kind" }, { status: 400 });
+  }
+
+  try {
+    const images =
+      rawKind === "event"
+        ? await prisma.eventImage.findMany({
+            where: { eventId: id },
+            select: { image: { select: { id: true, storagePath: true } } }
+          })
+        : rawKind === "find"
+          ? await prisma.findImage.findMany({
+              where: { findId: id },
+              select: { image: { select: { id: true, storagePath: true } } }
+            })
+          : await prisma.prospectImage.findMany({
+              where: { prospectId: id },
+              select: { image: { select: { id: true, storagePath: true } } }
+            });
+
+    if (rawKind === "event") {
+      await prisma.event.delete({
+        where: { id }
+      });
+    } else if (rawKind === "find") {
+      await prisma.find.delete({
+        where: { id }
+      });
+    } else {
+      await prisma.prospect.delete({
+        where: { id }
+      });
+    }
+
+    for (const entry of images) {
+      await cleanupOrphanedImage(prisma, entry.image);
+    }
+
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to delete feature";
     return NextResponse.json({ error: message }, { status: 400 });
   }
 }

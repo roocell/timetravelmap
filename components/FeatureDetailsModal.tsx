@@ -36,6 +36,12 @@ export type FeatureDetails = {
   type?: string | null;
   metal?: string | null;
   itemCount?: number | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  geometry?: {
+    type: string;
+    coordinates: unknown;
+  } | null;
   images?: FeatureImage[];
 };
 
@@ -43,6 +49,8 @@ type FeatureDetailsModalProps = {
   feature: FeatureDetails | null;
   onClose: () => void;
   onFeatureChange?: (feature: FeatureDetails) => void;
+  onFeatureDelete?: (feature: FeatureDetails) => void;
+  onFeatureMove?: (feature: FeatureDetails) => void;
 };
 
 type EditableFieldProps = {
@@ -250,13 +258,17 @@ function EditableField({
 export default function FeatureDetailsModal({
   feature,
   onClose,
-  onFeatureChange = () => {}
+  onFeatureChange = () => {},
+  onFeatureDelete = () => {},
+  onFeatureMove = () => {}
 }: FeatureDetailsModalProps) {
   const [draftFeature, setDraftFeature] = useState<FeatureDetails | null>(feature);
   const [galleryIndex, setGalleryIndex] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [imageSaving, setImageSaving] = useState(false);
   const [pendingDeleteImageSrc, setPendingDeleteImageSrc] = useState<string | null>(null);
+  const [pendingDeleteFeature, setPendingDeleteFeature] = useState(false);
+  const [featureDeleting, setFeatureDeleting] = useState(false);
   const [dragActive, setDragActive] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -265,6 +277,8 @@ export default function FeatureDetailsModal({
     setGalleryIndex(null);
     setError(null);
     setPendingDeleteImageSrc(null);
+    setPendingDeleteFeature(false);
+    setFeatureDeleting(false);
   }, [feature]);
 
   const images = draftFeature?.images ?? [];
@@ -386,6 +400,30 @@ export default function FeatureDetailsModal({
       }
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : "Failed to remove image");
+    }
+  };
+
+  const handleDeleteFeature = async () => {
+    setFeatureDeleting(true);
+    setError(null);
+
+    try {
+      const response = await fetch(`/api/features/${draftFeature.kind}/${draftFeature.id}`, {
+        method: "DELETE"
+      });
+
+      if (!response.ok) {
+        const body = await response.json().catch(() => null);
+        throw new Error(body?.error ?? "Failed to delete feature");
+      }
+
+      setPendingDeleteFeature(false);
+      setFeatureDeleting(false);
+      onFeatureDelete(draftFeature);
+      onClose();
+    } catch (deleteError) {
+      setError(deleteError instanceof Error ? deleteError.message : "Failed to delete feature");
+      setFeatureDeleting(false);
     }
   };
 
@@ -668,6 +706,31 @@ export default function FeatureDetailsModal({
                   {error}
                 </div>
               ) : null}
+
+              <div className="mt-2">
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onFeatureMove(draftFeature);
+                      onClose();
+                    }}
+                    className="inline-flex items-center gap-2 rounded-xl border border-[rgba(21,49,63,0.14)] bg-white px-4 py-2 text-[12px] font-bold uppercase tracking-[0.08em] text-[#15313f]"
+                  >
+                    <MapPinned size={14} strokeWidth={2.2} />
+                    <span>{draftFeature.kind === "event" ? "Edit Shape" : "Move"}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setPendingDeleteFeature(true)}
+                    className="inline-flex items-center gap-2 rounded-xl bg-[#8a2b2b] px-4 py-2 text-[12px] font-bold uppercase tracking-[0.08em] text-white"
+                  >
+                    <Trash2 size={14} strokeWidth={2.2} />
+                    <span>Delete {draftFeature.kind}</span>
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -743,6 +806,34 @@ export default function FeatureDetailsModal({
               <button
                 type="button"
                 onClick={() => setPendingDeleteImageSrc(null)}
+                className="rounded-xl border border-[rgba(21,49,63,0.12)] bg-white px-4 py-2 text-[12px] font-bold uppercase tracking-[0.08em] text-[#526773]"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {pendingDeleteFeature ? (
+        <div className="fixed inset-0 z-[1400] flex items-center justify-center bg-[rgba(7,18,24,0.58)] p-4 backdrop-blur-[2px]">
+          <div className="w-full max-w-md rounded-[24px] border border-[rgba(255,255,255,0.18)] bg-[linear-gradient(180deg,#f8fbfc_0%,#eef4f7_100%)] p-6 shadow-[0_30px_90px_rgba(7,18,24,0.35)]">
+            <h3 className="text-lg font-semibold text-[#15313f]">Delete {draftFeature.kind}?</h3>
+            <div className="mt-5 flex gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  void handleDeleteFeature();
+                }}
+                className="inline-flex items-center gap-2 rounded-xl bg-[#8a2b2b] px-4 py-2 text-[12px] font-bold uppercase tracking-[0.08em] text-white disabled:opacity-60"
+                disabled={featureDeleting}
+              >
+                <Trash2 size={14} strokeWidth={2.2} />
+                <span>{featureDeleting ? "Deleting" : "Delete"}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setPendingDeleteFeature(false)}
                 className="rounded-xl border border-[rgba(21,49,63,0.12)] bg-white px-4 py-2 text-[12px] font-bold uppercase tracking-[0.08em] text-[#526773]"
               >
                 Cancel
