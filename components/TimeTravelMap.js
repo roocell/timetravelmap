@@ -2,7 +2,18 @@
 
 import { useEffect, useRef, useState } from "react";
 import L from "leaflet";
-import { Eye, EyeOff, Layers3, Map as MapIcon, Search } from "lucide-react";
+import {
+  Check,
+  Eye,
+  EyeOff,
+  Layers3,
+  Map as MapIcon,
+  PencilRuler,
+  Search,
+  Undo2,
+  X
+} from "lucide-react";
+import CreateEventModal from "./CreateEventModal";
 import DatasetsCard from "./DatasetsCard";
 import FeatureDetailsModal from "./FeatureDetailsModal";
 import TimelineSlider from "./TimelineSlider";
@@ -176,14 +187,17 @@ export default function TimeTravelMap({
   datasets,
   activeYears = [],
   prospectsActive = false,
+  onDatasetsChanged = () => {},
   onToggleYear = () => {},
   onToggleProspects = () => {}
 }) {
   const mapElementRef = useRef(null);
   const layerRefs = useRef([]);
   const datasetLayerRefs = useRef(new Map());
+  const drawingLayerRef = useRef(null);
   const yearFeaturesCacheRef = useRef(new Map());
   const featureOverridesRef = useRef({});
+  const isDrawingEventRef = useRef(false);
   const mapRef = useRef(null);
   const markerRef = useRef(null);
   const currentLocationMarkerRef = useRef(null);
@@ -195,14 +209,47 @@ export default function TimeTravelMap({
   const [sliderValue, setSliderValue] = useState(1);
   const [selectedFeature, setSelectedFeature] = useState(null);
   const [featureOverrides, setFeatureOverrides] = useState({});
+  const [datasetRefreshToken, setDatasetRefreshToken] = useState(0);
+  const [isDrawingEvent, setIsDrawingEvent] = useState(false);
+  const [draftEventPoints, setDraftEventPoints] = useState([]);
+  const [showCreateEventModal, setShowCreateEventModal] = useState(false);
 
   useEffect(() => {
     featureOverridesRef.current = featureOverrides;
   }, [featureOverrides]);
 
+  useEffect(() => {
+    isDrawingEventRef.current = isDrawingEvent;
+  }, [isDrawingEvent]);
+
   const openFeature = (feature) => {
     const overrideKey = `${feature.kind}:${feature.id}`;
     setSelectedFeature(featureOverridesRef.current[overrideKey] ?? feature);
+  };
+
+  const clearDraftEvent = () => {
+    setDraftEventPoints([]);
+    setShowCreateEventModal(false);
+    setIsDrawingEvent(false);
+  };
+
+  const startEventDraw = () => {
+    setSelectedFeature(null);
+    setShowCreateEventModal(false);
+    setDraftEventPoints([]);
+    setIsDrawingEvent(true);
+  };
+
+  const undoDraftPoint = () => {
+    setDraftEventPoints((current) => current.slice(0, -1));
+  };
+
+  const finishEventDraw = () => {
+    if (draftEventPoints.length < 3) {
+      return;
+    }
+
+    setShowCreateEventModal(true);
   };
 
   const scrollMapIntoView = () => {
@@ -512,6 +559,17 @@ export default function TimeTravelMap({
     };
 
     const handleMapClick = (event) => {
+      if (isDrawingEventRef.current) {
+        setDraftEventPoints((current) => [
+          ...current,
+          {
+            lat: event.latlng.lat,
+            lng: event.latlng.lng
+          }
+        ]);
+        return;
+      }
+
       if (markerRef.current) {
         map.removeLayer(markerRef.current);
       }
@@ -570,6 +628,7 @@ export default function TimeTravelMap({
 
       currentLocationMarkerRef.current = null;
       markerRef.current = null;
+      drawingLayerRef.current = null;
       map.off("click", handleMapClick);
       map.off("moveend", persistMapView);
       map.off("zoomend", persistMapView);
@@ -582,6 +641,54 @@ export default function TimeTravelMap({
       layerRefs.current = [];
     };
   }, []);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) {
+      return;
+    }
+
+    if (!drawingLayerRef.current) {
+      drawingLayerRef.current = L.layerGroup().addTo(map);
+    }
+
+    const layer = drawingLayerRef.current;
+    layer.clearLayers();
+
+    if (!draftEventPoints.length) {
+      return;
+    }
+
+    const latLngs = draftEventPoints.map((point) => [point.lat, point.lng]);
+    const line = L.polyline(latLngs, {
+      color: "#15313f",
+      weight: 3,
+      opacity: 0.85,
+      dashArray: "6 6"
+    });
+    layer.addLayer(line);
+
+    if (draftEventPoints.length >= 3) {
+      const polygon = L.polygon(latLngs, {
+        color: "#0f5e7d",
+        weight: 3,
+        fillColor: "#8cc9de",
+        fillOpacity: 0.35
+      });
+      layer.addLayer(polygon);
+    }
+
+    draftEventPoints.forEach((point, index) => {
+      const marker = L.circleMarker([point.lat, point.lng], {
+        radius: 6,
+        color: "#15313f",
+        fillColor: index === draftEventPoints.length - 1 ? "#f0c419" : "#ffffff",
+        fillOpacity: 1,
+        weight: 2
+      });
+      layer.addLayer(marker);
+    });
+  }, [draftEventPoints]);
 
   const toggleLayers = () => {
     const nextVisible = !layersVisible;
@@ -733,7 +840,64 @@ export default function TimeTravelMap({
     return () => {
       cancelled = true;
     };
-  }, [activeYears, prospectsActive]);
+  }, [activeYears, datasetRefreshToken, prospectsActive]);
+
+  const createEvent = async (values) => {
+    const response = await fetch("/api/features/event", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json"
+      },
+      body: JSON.stringify({
+        ...values,
+        points: draftEventPoints
+      })
+    });
+
+    const body = await response.json().catch(() => null);
+    if (!response.ok) {
+      throw new Error(body?.error ?? "Failed to create event");
+    }
+
+    const event = body?.event;
+    if (!event) {
+      throw new Error("Missing event payload");
+    }
+
+    const eventYear = Number.parseInt(String(event.eventDate).slice(0, 4), 10);
+    if (Number.isFinite(eventYear)) {
+      yearFeaturesCacheRef.current.delete(eventYear);
+      const existingLayer = datasetLayerRefs.current.get(`year:${eventYear}`);
+      if (existingLayer && mapRef.current) {
+        mapRef.current.removeLayer(existingLayer);
+        datasetLayerRefs.current.delete(`year:${eventYear}`);
+      }
+
+      if (!activeYears.includes(eventYear)) {
+        onToggleYear(eventYear);
+      } else {
+        setDatasetRefreshToken((current) => current + 1);
+      }
+    }
+
+    void onDatasetsChanged();
+    setFeatureOverrides((current) => ({
+      ...current,
+      [`event:${event.id}`]: event
+    }));
+    openFeature(event);
+    clearDraftEvent();
+
+    if (mapRef.current && event.geometry) {
+      const bounds = L.geoJSON(event.geometry).getBounds();
+      if (bounds.isValid()) {
+        mapRef.current.fitBounds(bounds, {
+          padding: [40, 40],
+          maxZoom: 17
+        });
+      }
+    }
+  };
 
   return (
     <main className="min-h-screen bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.7),transparent_45%),linear-gradient(180deg,#dce8ef_0%,#c3d2db_100%)] p-8 max-[700px]:p-4">
@@ -767,6 +931,54 @@ export default function TimeTravelMap({
           </div>
 
           <div className="flex min-w-0 items-center gap-3 max-[700px]:justify-between">
+            {isDrawingEvent ? (
+              <>
+                <div className="rounded-[10px] border border-[rgba(21,49,63,0.12)] bg-[rgba(255,255,255,0.78)] px-3 py-2 text-[13px] font-semibold text-[#526773]">
+                  Click map to add polygon points
+                </div>
+
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={undoDraftPoint}
+                  disabled={draftEventPoints.length === 0}
+                  className="inline-flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <Undo2 size={15} strokeWidth={2.2} />
+                  <span>Undo</span>
+                </Button>
+
+                <Button
+                  type="button"
+                  onClick={finishEventDraw}
+                  disabled={draftEventPoints.length < 3}
+                  className="inline-flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <Check size={15} strokeWidth={2.2} />
+                  <span>Finish Event</span>
+                </Button>
+
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={clearDraftEvent}
+                  className="inline-flex items-center gap-2"
+                >
+                  <X size={15} strokeWidth={2.2} />
+                  <span>Cancel</span>
+                </Button>
+              </>
+            ) : (
+              <Button
+                type="button"
+                onClick={startEventDraw}
+                className="inline-flex items-center gap-2"
+              >
+                <PencilRuler size={15} strokeWidth={2.2} />
+                <span>New Event</span>
+              </Button>
+            )}
+
             <Button
               type="button"
               variant="ghost"
@@ -831,6 +1043,13 @@ export default function TimeTravelMap({
             [`${feature.kind}:${feature.id}`]: feature
           }));
         }}
+      />
+
+      <CreateEventModal
+        open={showCreateEventModal}
+        pointCount={draftEventPoints.length}
+        onClose={() => setShowCreateEventModal(false)}
+        onSubmit={createEvent}
       />
     </main>
   );

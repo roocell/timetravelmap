@@ -1,0 +1,402 @@
+"use client";
+
+import { CalendarDays, Clock3, MapPinned, Radar, Save, X } from "lucide-react";
+import {
+  useEffect,
+  useState,
+  useRef,
+  type DragEvent,
+  type FormEvent,
+  type ReactNode
+} from "react";
+
+type CreateEventValues = {
+  title: string;
+  eventDate: string;
+  durationMinutes: string;
+  deviceUsed: string;
+  deviceMode: string;
+  description: string;
+  fillColor: string;
+  outlineColor: string;
+  images: Array<{
+    src: string;
+    altText?: string | null;
+    caption?: string | null;
+  }>;
+};
+
+type CreateEventModalProps = {
+  open: boolean;
+  pointCount: number;
+  onClose: () => void;
+  onSubmit: (values: CreateEventValues) => Promise<void>;
+};
+
+function getTodayValue() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+const INITIAL_VALUES: CreateEventValues = {
+  title: "",
+  eventDate: getTodayValue(),
+  durationMinutes: "",
+  deviceUsed: "",
+  deviceMode: "",
+  description: "",
+  fillColor: "#ffffff",
+  outlineColor: "#f0c419",
+  images: []
+};
+
+function Field({
+  label,
+  icon,
+  children
+}: {
+  label: string;
+  icon: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <label className="grid gap-2">
+      <span className="inline-flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.08em] text-[#6a7d88]">
+        {icon}
+        <span>{label}</span>
+      </span>
+      {children}
+    </label>
+  );
+}
+
+export default function CreateEventModal({
+  open,
+  pointCount,
+  onClose,
+  onSubmit
+}: CreateEventModalProps) {
+  const [values, setValues] = useState<CreateEventValues>(INITIAL_VALUES);
+  const [saving, setSaving] = useState(false);
+  const [imageSaving, setImageSaving] = useState(false);
+  const [dragActive, setDragActive] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    setValues({
+      ...INITIAL_VALUES,
+      eventDate: getTodayValue()
+    });
+    setSaving(false);
+    setImageSaving(false);
+    setDragActive(false);
+    setError(null);
+  }, [open]);
+
+  if (!open) {
+    return null;
+  }
+
+  const updateValue = (key: keyof CreateEventValues, value: string) => {
+    setValues((current) => ({
+      ...current,
+      [key]: value
+    }));
+  };
+
+  const uploadFiles = async (files: File[]) => {
+    if (!files.length) {
+      return;
+    }
+
+    setImageSaving(true);
+    setError(null);
+
+    try {
+      const uploadedImages: CreateEventValues["images"] = [];
+
+      for (const file of files) {
+        const formData = new FormData();
+        formData.append("file", file);
+
+        const response = await fetch("/api/uploads/images", {
+          method: "POST",
+          body: formData
+        });
+
+        if (!response.ok) {
+          const body = await response.json().catch(() => null);
+          throw new Error(body?.error ?? `Failed to upload ${file.name}`);
+        }
+
+        const upload = await response.json();
+        uploadedImages.push({
+          src: upload.src,
+          altText: upload.altText ?? file.name,
+          caption: ""
+        });
+      }
+
+      setValues((current) => ({
+        ...current,
+        images: [...current.images, ...uploadedImages]
+      }));
+    } catch (uploadError) {
+      setError(uploadError instanceof Error ? uploadError.message : "Failed to upload images");
+    } finally {
+      setImageSaving(false);
+      setDragActive(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+    }
+  };
+
+  const handleDrop = async (event: DragEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    setDragActive(false);
+
+    const files = Array.from(event.dataTransfer.files ?? []).filter((file) =>
+      file.type.startsWith("image/")
+    );
+
+    await uploadFiles(files);
+  };
+
+  const removeImage = (src: string) => {
+    setValues((current) => ({
+      ...current,
+      images: current.images.filter((image) => image.src !== src)
+    }));
+  };
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setSaving(true);
+    setError(null);
+
+    try {
+      await onSubmit(values);
+    } catch (submitError) {
+      setError(submitError instanceof Error ? submitError.message : "Failed to create event");
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[1200] flex items-center justify-center bg-[rgba(15,29,39,0.6)] p-4 backdrop-blur-sm">
+      <div className="w-full max-w-3xl rounded-[28px] border border-[rgba(33,55,70,0.14)] bg-[rgba(250,252,253,0.98)] shadow-[0_30px_100px_rgba(14,31,41,0.28)]">
+        <div className="flex items-start justify-between gap-4 border-b border-[rgba(21,49,63,0.08)] px-6 py-5">
+          <div className="grid gap-1">
+            <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-[#6a7d88]">
+              New Event
+            </p>
+            <h2 className="text-2xl font-semibold text-[#15313f]">Save Drawn Polygon</h2>
+            <p className="text-sm text-[#526773]">
+              {pointCount} points captured. Add the event details, then save it into the map.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={onClose}
+            className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-[rgba(21,49,63,0.1)] bg-white text-[#526773] shadow-[0_10px_24px_rgba(0,0,0,0.08)]"
+          >
+            <X size={18} strokeWidth={2.2} />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="grid gap-5 px-6 py-6">
+          <div className="grid gap-5 md:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+            <div className="grid gap-4">
+              <Field label="Title" icon={<MapPinned size={14} strokeWidth={2.1} />}>
+                <input
+                  value={values.title}
+                  onChange={(event) => updateValue("title", event.currentTarget.value)}
+                  placeholder="South field after rain"
+                  className="rounded-2xl border border-[rgba(21,49,63,0.12)] bg-white px-4 py-3 text-[15px] text-[#15313f] outline-none"
+                  required
+                />
+              </Field>
+
+              <Field label="Description" icon={<Radar size={14} strokeWidth={2.1} />}>
+                <textarea
+                  value={values.description}
+                  onChange={(event) => updateValue("description", event.currentTarget.value)}
+                  placeholder="Notes about the outing, conditions, permissions, and anything worth keeping."
+                  className="min-h-40 rounded-2xl border border-[rgba(21,49,63,0.12)] bg-white px-4 py-3 text-[15px] text-[#15313f] outline-none"
+                />
+              </Field>
+
+              <div className="grid gap-2">
+                <span className="inline-flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.08em] text-[#6a7d88]">
+                  <MapPinned size={14} strokeWidth={2.1} />
+                  <span>Images</span>
+                </span>
+
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  onDragOver={(event) => {
+                    event.preventDefault();
+                    setDragActive(true);
+                  }}
+                  onDragLeave={(event) => {
+                    const relatedTarget = event.relatedTarget as Node | null;
+                    if (!event.currentTarget.contains(relatedTarget)) {
+                      setDragActive(false);
+                    }
+                  }}
+                  onDrop={handleDrop}
+                  className={`rounded-[24px] border border-dashed px-5 py-8 text-left transition ${
+                    dragActive
+                      ? "border-[#0f5e7d] bg-[rgba(140,201,222,0.18)]"
+                      : "border-[rgba(21,49,63,0.16)] bg-[rgba(255,255,255,0.5)]"
+                  }`}
+                >
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    className="hidden"
+                    onChange={(event) => {
+                      const files = Array.from(event.currentTarget.files ?? []);
+                      void uploadFiles(files);
+                    }}
+                  />
+                  <div className="grid gap-1">
+                    <span className="text-[14px] font-semibold text-[#15313f]">
+                      {imageSaving ? "Uploading images..." : "Drop images here or click to upload"}
+                    </span>
+                    <span className="text-[13px] text-[#6a7d88]">
+                      Add one or many images before saving the event.
+                    </span>
+                  </div>
+                </button>
+
+                {values.images.length ? (
+                  <div className="grid grid-cols-2 gap-3">
+                    {values.images.map((image) => (
+                      <div
+                        key={image.src}
+                        className="overflow-hidden rounded-[20px] border border-[rgba(21,49,63,0.08)] bg-white shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]"
+                      >
+                        <div className="aspect-square overflow-hidden bg-[rgba(21,49,63,0.04)]">
+                          <img
+                            src={image.src}
+                            alt={image.altText ?? "Uploaded event image"}
+                            className="h-full w-full object-cover"
+                          />
+                        </div>
+                        <div className="flex items-center justify-end p-2">
+                          <button
+                            type="button"
+                            onClick={() => removeImage(image.src)}
+                            className="rounded-xl border border-[rgba(21,49,63,0.12)] bg-white px-3 py-1.5 text-[12px] font-semibold text-[#526773]"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            </div>
+
+            <div className="grid gap-4">
+              <Field label="Date" icon={<CalendarDays size={14} strokeWidth={2.1} />}>
+                <input
+                  type="date"
+                  value={values.eventDate}
+                  onChange={(event) => updateValue("eventDate", event.currentTarget.value)}
+                  className="rounded-2xl border border-[rgba(21,49,63,0.12)] bg-white px-4 py-3 text-[15px] text-[#15313f] outline-none"
+                  required
+                />
+              </Field>
+
+              <Field label="Duration Minutes" icon={<Clock3 size={14} strokeWidth={2.1} />}>
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={values.durationMinutes}
+                  onChange={(event) => updateValue("durationMinutes", event.currentTarget.value)}
+                  placeholder="180"
+                  className="rounded-2xl border border-[rgba(21,49,63,0.12)] bg-white px-4 py-3 text-[15px] text-[#15313f] outline-none"
+                />
+              </Field>
+
+              <Field label="Device Used" icon={<Radar size={14} strokeWidth={2.1} />}>
+                <input
+                  value={values.deviceUsed}
+                  onChange={(event) => updateValue("deviceUsed", event.currentTarget.value)}
+                  placeholder="nox600"
+                  className="rounded-2xl border border-[rgba(21,49,63,0.12)] bg-white px-4 py-3 text-[15px] text-[#15313f] outline-none"
+                />
+              </Field>
+
+              <Field label="Device Mode" icon={<Radar size={14} strokeWidth={2.1} />}>
+                <input
+                  value={values.deviceMode}
+                  onChange={(event) => updateValue("deviceMode", event.currentTarget.value)}
+                  placeholder="f2am"
+                  className="rounded-2xl border border-[rgba(21,49,63,0.12)] bg-white px-4 py-3 text-[15px] text-[#15313f] outline-none"
+                />
+              </Field>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field label="Fill" icon={<span className="h-3 w-3 rounded-full bg-[#8cc9de]" />}>
+                  <input
+                    type="color"
+                    value={values.fillColor}
+                    onChange={(event) => updateValue("fillColor", event.currentTarget.value)}
+                    className="h-12 w-full rounded-2xl border border-[rgba(21,49,63,0.12)] bg-white p-1.5"
+                  />
+                </Field>
+
+                <Field label="Outline" icon={<span className="h-3 w-3 rounded-full bg-[#f0c419]" />}>
+                  <input
+                    type="color"
+                    value={values.outlineColor}
+                    onChange={(event) => updateValue("outlineColor", event.currentTarget.value)}
+                    className="h-12 w-full rounded-2xl border border-[rgba(21,49,63,0.12)] bg-white p-1.5"
+                  />
+                </Field>
+              </div>
+            </div>
+          </div>
+
+          {error ? (
+            <div className="rounded-2xl border border-[rgba(179,54,54,0.18)] bg-[rgba(255,240,240,0.92)] px-4 py-3 text-sm text-[#8f2b2b]">
+              {error}
+            </div>
+          ) : null}
+
+          <div className="flex items-center justify-end gap-3 border-t border-[rgba(21,49,63,0.08)] pt-5">
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-2xl border border-[rgba(21,49,63,0.12)] bg-white px-4 py-3 text-sm font-semibold text-[#526773]"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={saving}
+              className="inline-flex items-center gap-2 rounded-2xl bg-[#15313f] px-4 py-3 text-sm font-semibold text-white shadow-[0_14px_30px_rgba(21,49,63,0.2)]"
+            >
+              <Save size={16} strokeWidth={2.1} />
+              <span>{saving ? "Saving Event..." : "Save Event"}</span>
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}

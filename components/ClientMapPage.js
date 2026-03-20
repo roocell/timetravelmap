@@ -52,39 +52,38 @@ export default function ClientMapPage() {
     loading: true
   });
 
-  useEffect(() => {
-    let cancelled = false;
-
-    const loadDatasets = async () => {
-      try {
-        const response = await fetch("/api/datasets");
-        if (!response.ok) {
-          throw new Error("Failed to load datasets");
-        }
-
-        const payload = await response.json();
-        if (!cancelled) {
-          setDatasets({
-            years: payload.years ?? [],
-            prospects: payload.prospects ?? { count: 0, entries: [] },
-            loading: false
-          });
-        }
-      } catch {
-        if (!cancelled) {
-          setDatasets({
-            years: [],
-            prospects: { count: 0, entries: [] },
-            loading: false
-          });
-        }
+  const loadDatasets = async (state = { cancelled: false }) => {
+    try {
+      const response = await fetch("/api/datasets");
+      if (!response.ok) {
+        throw new Error("Failed to load datasets");
       }
-    };
 
-    loadDatasets();
+      const payload = await response.json();
+      if (!state.cancelled) {
+        setDatasets({
+          years: payload.years ?? [],
+          prospects: payload.prospects ?? { count: 0, entries: [] },
+          loading: false
+        });
+      }
+    } catch {
+      if (!state.cancelled) {
+        setDatasets({
+          years: [],
+          prospects: { count: 0, entries: [] },
+          loading: false
+        });
+      }
+    }
+  };
+
+  useEffect(() => {
+    const state = { cancelled: false };
+    void loadDatasets(state);
 
     return () => {
-      cancelled = true;
+      state.cancelled = true;
     };
   }, []);
 
@@ -109,6 +108,7 @@ export default function ClientMapPage() {
       datasets={datasets}
       activeYears={activeYears}
       prospectsActive={prospectsActive}
+      onDatasetsChanged={() => loadDatasets()}
       onToggleYear={toggleYear}
       onToggleProspects={() => setProspectsActive((current) => !current)}
     />
