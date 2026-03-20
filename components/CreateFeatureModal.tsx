@@ -1,53 +1,74 @@
 "use client";
 
-import { CalendarDays, Clock3, MapPinned, Radar, Save, X } from "lucide-react";
+import {
+  CalendarDays,
+  Clock3,
+  Coins,
+  MapPinned,
+  Radar,
+  Save,
+  X
+} from "lucide-react";
 import {
   useEffect,
-  useState,
   useRef,
+  useState,
   type DragEvent,
   type FormEvent,
   type ReactNode
 } from "react";
 
-type CreateEventValues = {
+type FeatureImage = {
+  src: string;
+  altText?: string | null;
+  caption?: string | null;
+};
+
+export type CreateFeatureValues = {
   title: string;
-  eventDate: string;
+  date: string;
+  description: string;
+  images: FeatureImage[];
   durationMinutes: string;
   deviceUsed: string;
   deviceMode: string;
-  description: string;
   fillColor: string;
   outlineColor: string;
-  images: Array<{
-    src: string;
-    altText?: string | null;
-    caption?: string | null;
-  }>;
+  ageLabel: string;
+  type: string;
+  metal: string;
+  itemCount: string;
 };
 
-type CreateEventModalProps = {
+type CreateFeatureModalProps = {
   open: boolean;
+  mode: "event" | "find";
   pointCount: number;
   onClose: () => void;
-  onSubmit: (values: CreateEventValues) => Promise<void>;
+  onSubmit: (values: CreateFeatureValues) => Promise<void>;
 };
 
 function getTodayValue() {
   return new Date().toISOString().slice(0, 10);
 }
 
-const INITIAL_VALUES: CreateEventValues = {
-  title: "",
-  eventDate: getTodayValue(),
-  durationMinutes: "",
-  deviceUsed: "",
-  deviceMode: "",
-  description: "",
-  fillColor: "#ffffff",
-  outlineColor: "#f0c419",
-  images: []
-};
+function getInitialValues(): CreateFeatureValues {
+  return {
+    title: "",
+    date: getTodayValue(),
+    description: "",
+    images: [],
+    durationMinutes: "",
+    deviceUsed: "",
+    deviceMode: "",
+    fillColor: "#ffffff",
+    outlineColor: "#f0c419",
+    ageLabel: "",
+    type: "other",
+    metal: "",
+    itemCount: ""
+  };
+}
 
 function Field({
   label,
@@ -69,13 +90,33 @@ function Field({
   );
 }
 
-export default function CreateEventModal({
+function getModalCopy(mode: "event" | "find", pointCount: number) {
+  if (mode === "find") {
+    return {
+      eyebrow: "New Find",
+      title: "Save Map Pin",
+      helper:
+        pointCount > 0
+          ? "Pin captured. Add the find details, then save it into the map."
+          : "Click the map to place a find pin, then save its details."
+    };
+  }
+
+  return {
+    eyebrow: "New Event",
+    title: "Save Drawn Polygon",
+    helper: `${pointCount} points captured. Add the event details, then save it into the map.`
+  };
+}
+
+export default function CreateFeatureModal({
   open,
+  mode,
   pointCount,
   onClose,
   onSubmit
-}: CreateEventModalProps) {
-  const [values, setValues] = useState<CreateEventValues>(INITIAL_VALUES);
+}: CreateFeatureModalProps) {
+  const [values, setValues] = useState<CreateFeatureValues>(getInitialValues());
   const [saving, setSaving] = useState(false);
   const [imageSaving, setImageSaving] = useState(false);
   const [dragActive, setDragActive] = useState(false);
@@ -87,21 +128,20 @@ export default function CreateEventModal({
       return;
     }
 
-    setValues({
-      ...INITIAL_VALUES,
-      eventDate: getTodayValue()
-    });
+    setValues(getInitialValues());
     setSaving(false);
     setImageSaving(false);
     setDragActive(false);
     setError(null);
-  }, [open]);
+  }, [open, mode]);
 
   if (!open) {
     return null;
   }
 
-  const updateValue = (key: keyof CreateEventValues, value: string) => {
+  const copy = getModalCopy(mode, pointCount);
+
+  const updateValue = (key: keyof CreateFeatureValues, value: string) => {
     setValues((current) => ({
       ...current,
       [key]: value
@@ -117,7 +157,7 @@ export default function CreateEventModal({
     setError(null);
 
     try {
-      const uploadedImages: CreateEventValues["images"] = [];
+      const uploadedImages: CreateFeatureValues["images"] = [];
 
       for (const file of files) {
         const formData = new FormData();
@@ -182,7 +222,11 @@ export default function CreateEventModal({
     try {
       await onSubmit(values);
     } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : "Failed to create event");
+      setError(
+        submitError instanceof Error
+          ? submitError.message
+          : `Failed to create ${mode}`
+      );
       setSaving(false);
     }
   };
@@ -193,12 +237,10 @@ export default function CreateEventModal({
         <div className="flex items-start justify-between gap-4 border-b border-[rgba(21,49,63,0.08)] px-6 py-5">
           <div className="grid gap-1">
             <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-[#6a7d88]">
-              New Event
+              {copy.eyebrow}
             </p>
-            <h2 className="text-2xl font-semibold text-[#15313f]">Save Drawn Polygon</h2>
-            <p className="text-sm text-[#526773]">
-              {pointCount} points captured. Add the event details, then save it into the map.
-            </p>
+            <h2 className="text-2xl font-semibold text-[#15313f]">{copy.title}</h2>
+            <p className="text-sm text-[#526773]">{copy.helper}</p>
           </div>
 
           <button
@@ -212,22 +254,38 @@ export default function CreateEventModal({
 
         <form onSubmit={handleSubmit} className="grid gap-5 px-6 py-6">
           <div className="grid gap-5 md:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
-            <div className="grid gap-4">
-              <Field label="Title" icon={<MapPinned size={14} strokeWidth={2.1} />}>
+            <div className="min-w-0 grid gap-4">
+              <Field
+                label="Title"
+                icon={
+                  mode === "event" ? (
+                    <MapPinned size={14} strokeWidth={2.1} />
+                  ) : (
+                    <Coins size={14} strokeWidth={2.1} />
+                  )
+                }
+              >
                 <input
                   value={values.title}
                   onChange={(event) => updateValue("title", event.currentTarget.value)}
-                  placeholder="South field after rain"
+                  placeholder={mode === "event" ? "South field after rain" : "1905 barber dime"}
                   className="rounded-2xl border border-[rgba(21,49,63,0.12)] bg-white px-4 py-3 text-[15px] text-[#15313f] outline-none"
                   required
                 />
               </Field>
 
-              <Field label="Description" icon={<Radar size={14} strokeWidth={2.1} />}>
+              <Field
+                label="Description"
+                icon={mode === "event" ? <Radar size={14} strokeWidth={2.1} /> : <Coins size={14} strokeWidth={2.1} />}
+              >
                 <textarea
                   value={values.description}
                   onChange={(event) => updateValue("description", event.currentTarget.value)}
-                  placeholder="Notes about the outing, conditions, permissions, and anything worth keeping."
+                  placeholder={
+                    mode === "event"
+                      ? "Notes about the outing, conditions, permissions, and anything worth keeping."
+                      : "Notes about the find, location context, and condition."
+                  }
                   className="min-h-40 rounded-2xl border border-[rgba(21,49,63,0.12)] bg-white px-4 py-3 text-[15px] text-[#15313f] outline-none"
                 />
               </Field>
@@ -274,7 +332,7 @@ export default function CreateEventModal({
                       {imageSaving ? "Uploading images..." : "Drop images here or click to upload"}
                     </span>
                     <span className="text-[13px] text-[#6a7d88]">
-                      Add one or many images before saving the event.
+                      Add one or many images before saving the {mode}.
                     </span>
                   </div>
                 </button>
@@ -289,7 +347,7 @@ export default function CreateEventModal({
                         <div className="aspect-square overflow-hidden bg-[rgba(21,49,63,0.04)]">
                           <img
                             src={image.src}
-                            alt={image.altText ?? "Uploaded event image"}
+                            alt={image.altText ?? "Uploaded feature image"}
                             className="h-full w-full object-cover"
                           />
                         </div>
@@ -309,66 +367,122 @@ export default function CreateEventModal({
               </div>
             </div>
 
-            <div className="grid gap-4">
+            <div className="min-w-0 grid gap-4">
               <Field label="Date" icon={<CalendarDays size={14} strokeWidth={2.1} />}>
                 <input
                   type="date"
-                  value={values.eventDate}
-                  onChange={(event) => updateValue("eventDate", event.currentTarget.value)}
+                  value={values.date}
+                  onChange={(event) => updateValue("date", event.currentTarget.value)}
                   className="rounded-2xl border border-[rgba(21,49,63,0.12)] bg-white px-4 py-3 text-[15px] text-[#15313f] outline-none"
                   required
                 />
               </Field>
 
-              <Field label="Duration Minutes" icon={<Clock3 size={14} strokeWidth={2.1} />}>
-                <input
-                  type="number"
-                  min="0"
-                  step="1"
-                  value={values.durationMinutes}
-                  onChange={(event) => updateValue("durationMinutes", event.currentTarget.value)}
-                  placeholder="180"
-                  className="rounded-2xl border border-[rgba(21,49,63,0.12)] bg-white px-4 py-3 text-[15px] text-[#15313f] outline-none"
-                />
-              </Field>
+              {mode === "event" ? (
+                <>
+                  <Field label="Duration Minutes" icon={<Clock3 size={14} strokeWidth={2.1} />}>
+                    <input
+                      type="number"
+                      min="0"
+                      step="1"
+                      value={values.durationMinutes}
+                      onChange={(event) => updateValue("durationMinutes", event.currentTarget.value)}
+                      placeholder="180"
+                      className="rounded-2xl border border-[rgba(21,49,63,0.12)] bg-white px-4 py-3 text-[15px] text-[#15313f] outline-none"
+                    />
+                  </Field>
 
-              <Field label="Device Used" icon={<Radar size={14} strokeWidth={2.1} />}>
-                <input
-                  value={values.deviceUsed}
-                  onChange={(event) => updateValue("deviceUsed", event.currentTarget.value)}
-                  placeholder="nox600"
-                  className="rounded-2xl border border-[rgba(21,49,63,0.12)] bg-white px-4 py-3 text-[15px] text-[#15313f] outline-none"
-                />
-              </Field>
+                  <Field label="Device Used" icon={<Radar size={14} strokeWidth={2.1} />}>
+                    <input
+                      value={values.deviceUsed}
+                      onChange={(event) => updateValue("deviceUsed", event.currentTarget.value)}
+                      placeholder="nox600"
+                      className="rounded-2xl border border-[rgba(21,49,63,0.12)] bg-white px-4 py-3 text-[15px] text-[#15313f] outline-none"
+                    />
+                  </Field>
 
-              <Field label="Device Mode" icon={<Radar size={14} strokeWidth={2.1} />}>
-                <input
-                  value={values.deviceMode}
-                  onChange={(event) => updateValue("deviceMode", event.currentTarget.value)}
-                  placeholder="f2am"
-                  className="rounded-2xl border border-[rgba(21,49,63,0.12)] bg-white px-4 py-3 text-[15px] text-[#15313f] outline-none"
-                />
-              </Field>
+                  <Field label="Device Mode" icon={<Radar size={14} strokeWidth={2.1} />}>
+                    <input
+                      value={values.deviceMode}
+                      onChange={(event) => updateValue("deviceMode", event.currentTarget.value)}
+                      placeholder="f2am"
+                      className="rounded-2xl border border-[rgba(21,49,63,0.12)] bg-white px-4 py-3 text-[15px] text-[#15313f] outline-none"
+                    />
+                  </Field>
 
-              <div className="grid gap-4 sm:grid-cols-2">
-                <Field label="Fill" icon={<span className="h-3 w-3 rounded-full bg-[#8cc9de]" />}>
-                  <input
-                    type="color"
-                    value={values.fillColor}
-                    onChange={(event) => updateValue("fillColor", event.currentTarget.value)}
-                    className="h-12 w-full rounded-2xl border border-[rgba(21,49,63,0.12)] bg-white p-1.5"
-                  />
-                </Field>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <Field label="Fill" icon={<span className="h-3 w-3 rounded-full bg-white ring-1 ring-[rgba(21,49,63,0.16)]" />}>
+                      <input
+                        type="color"
+                        value={values.fillColor}
+                        onChange={(event) => updateValue("fillColor", event.currentTarget.value)}
+                        className="h-12 w-full rounded-2xl border border-[rgba(21,49,63,0.12)] bg-white p-1.5"
+                      />
+                    </Field>
 
-                <Field label="Outline" icon={<span className="h-3 w-3 rounded-full bg-[#f0c419]" />}>
-                  <input
-                    type="color"
-                    value={values.outlineColor}
-                    onChange={(event) => updateValue("outlineColor", event.currentTarget.value)}
-                    className="h-12 w-full rounded-2xl border border-[rgba(21,49,63,0.12)] bg-white p-1.5"
-                  />
-                </Field>
-              </div>
+                    <Field label="Outline" icon={<span className="h-3 w-3 rounded-full bg-[#f0c419]" />}>
+                      <input
+                        type="color"
+                        value={values.outlineColor}
+                        onChange={(event) => updateValue("outlineColor", event.currentTarget.value)}
+                        className="h-12 w-full rounded-2xl border border-[rgba(21,49,63,0.12)] bg-white p-1.5"
+                      />
+                    </Field>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <Field label="Age" icon={<CalendarDays size={14} strokeWidth={2.1} />}>
+                    <input
+                      value={values.ageLabel}
+                      onChange={(event) => updateValue("ageLabel", event.currentTarget.value)}
+                      placeholder="1905 or 1800s"
+                      className="rounded-2xl border border-[rgba(21,49,63,0.12)] bg-white px-4 py-3 text-[15px] text-[#15313f] outline-none"
+                    />
+                  </Field>
+
+                  <Field label="Type" icon={<Coins size={14} strokeWidth={2.1} />}>
+                    <select
+                      value={values.type}
+                      onChange={(event) => updateValue("type", event.currentTarget.value)}
+                      className="rounded-2xl border border-[rgba(21,49,63,0.12)] bg-white px-4 py-3 text-[15px] text-[#15313f] outline-none"
+                    >
+                      <option value="coin">Coin</option>
+                      <option value="ring">Ring</option>
+                      <option value="jewelry">Jewelry</option>
+                      <option value="artifact">Artifact</option>
+                      <option value="other">Other</option>
+                    </select>
+                  </Field>
+
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <Field label="Metal" icon={<Coins size={14} strokeWidth={2.1} />}>
+                      <select
+                        value={values.metal}
+                        onChange={(event) => updateValue("metal", event.currentTarget.value)}
+                        className="w-full min-w-0 rounded-2xl border border-[rgba(21,49,63,0.12)] bg-white px-4 py-3 text-[15px] text-[#15313f] outline-none"
+                      >
+                        <option value="">None</option>
+                        <option value="C">Copper</option>
+                        <option value="S">Silver</option>
+                        <option value="G">Gold</option>
+                      </select>
+                    </Field>
+
+                    <Field label="Count" icon={<Coins size={14} strokeWidth={2.1} />}>
+                      <input
+                        type="number"
+                        min="1"
+                        step="1"
+                        value={values.itemCount}
+                        onChange={(event) => updateValue("itemCount", event.currentTarget.value)}
+                        placeholder="1"
+                        className="w-full min-w-0 rounded-2xl border border-[rgba(21,49,63,0.12)] bg-white px-4 py-3 text-[15px] text-[#15313f] outline-none"
+                      />
+                    </Field>
+                  </div>
+                </>
+              )}
             </div>
           </div>
 
@@ -392,7 +506,7 @@ export default function CreateEventModal({
               className="inline-flex items-center gap-2 rounded-2xl bg-[#15313f] px-4 py-3 text-sm font-semibold text-white shadow-[0_14px_30px_rgba(21,49,63,0.2)]"
             >
               <Save size={16} strokeWidth={2.1} />
-              <span>{saving ? "Saving Event..." : "Save Event"}</span>
+              <span>{saving ? "Saving..." : `Save ${mode === "event" ? "Event" : "Find"}`}</span>
             </button>
           </div>
         </form>

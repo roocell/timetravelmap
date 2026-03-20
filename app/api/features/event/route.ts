@@ -83,7 +83,7 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const title = toNullableString(body?.title);
-    const eventDate = toNullableString(body?.eventDate);
+    const eventDate = toNullableString(body?.date ?? body?.eventDate);
     const geometry = normalizePolygon(body?.points);
 
     if (!title) {
