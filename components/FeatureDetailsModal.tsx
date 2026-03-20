@@ -6,11 +6,14 @@ import {
   ChevronRight,
   Clock3,
   Coins,
+  ImageUp,
   MapPinned,
   Radar,
+  Save,
+  Trash2,
   X
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from "react";
 
 type FeatureImage = {
   src: string;
@@ -18,7 +21,8 @@ type FeatureImage = {
   caption?: string | null;
 };
 
-type FeatureDetails = {
+export type FeatureDetails = {
+  id: string;
   kind: "event" | "find" | "prospect";
   title: string;
   description?: string | null;
@@ -38,67 +42,352 @@ type FeatureDetails = {
 type FeatureDetailsModalProps = {
   feature: FeatureDetails | null;
   onClose: () => void;
+  onFeatureChange?: (feature: FeatureDetails) => void;
 };
 
-function formatDate(value?: string | null) {
-  return value ? String(value).slice(0, 10) : null;
-}
+type EditableFieldProps = {
+  label: string;
+  value?: string | number | null;
+  placeholder?: string;
+  type?: "text" | "date" | "number" | "textarea" | "select";
+  options?: Array<{ label: string; value: string }>;
+  onSave: (value: string) => Promise<void>;
+  renderPreview?: (value: string) => ReactNode;
+};
 
-function formatDuration(minutes?: number | null) {
-  if (!minutes) {
-    return null;
-  }
-
-  if (minutes % 60 === 0) {
-    return `${minutes / 60} hr`;
-  }
-
-  if (minutes > 60) {
-    return `${(minutes / 60).toFixed(1)} hr`;
-  }
-
-  return `${minutes} min`;
-}
-
-function DetailRow({ label, value }: { label: string; value?: string | null }) {
-  if (!value) {
-    return null;
-  }
-
+function DetailShell({
+  label,
+  children
+}: {
+  label: string;
+  children: ReactNode;
+}) {
   return (
     <div className="grid gap-1 rounded-2xl border border-[rgba(21,49,63,0.08)] bg-[rgba(247,250,252,0.9)] px-4 py-3">
       <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-[#6a7d88]">
         {label}
       </span>
-      <span className="text-[15px] font-semibold text-[#15313f]">{value}</span>
+      {children}
     </div>
+  );
+}
+
+function renderRichText(value: string) {
+  return value.split(/\n{2,}/).map((paragraph, paragraphIndex) => (
+    <p
+      key={`paragraph-${paragraphIndex}`}
+      className="text-[15px] leading-7 text-[#445965]"
+    >
+      {paragraph.split(/(https?:\/\/[^\s]+)/g).map((part, index) => {
+        if (/^https?:\/\/[^\s]+$/.test(part)) {
+          return (
+            <a
+              key={`link-${paragraphIndex}-${index}`}
+              href={part}
+              target="_blank"
+              rel="noreferrer"
+              className="font-medium text-[#0f5e7d] underline underline-offset-4"
+            >
+              {part}
+            </a>
+          );
+        }
+
+        return (
+          <span key={`text-${paragraphIndex}-${index}`} className="whitespace-pre-wrap">
+            {part}
+          </span>
+        );
+      })}
+    </p>
+  ));
+}
+
+function formatDateOnly(value: string) {
+  return value.slice(0, 10);
+}
+
+function getFindShortLabel(feature: FeatureDetails | null) {
+  if (!feature || feature.kind !== "find") {
+    return null;
+  }
+
+  const type = String(feature.type ?? "").toLowerCase();
+  const metal = String(feature.metal ?? "").toUpperCase();
+  const title = String(feature.title ?? "").toLowerCase();
+  const description = String(feature.description ?? "").toLowerCase();
+
+  if (type === "ring" || title.includes("ring") || description.includes("ring")) {
+    return "R";
+  }
+
+  if (metal === "C") {
+    return "C";
+  }
+
+  if (metal === "S" || title.includes("silver") || description.includes("silver")) {
+    return "S";
+  }
+
+  if (metal === "G" || title.includes("gold") || description.includes("gold")) {
+    return "G";
+  }
+
+  return null;
+}
+
+function EditableField({
+  label,
+  value,
+  placeholder = "Click to edit",
+  type = "text",
+  options = [],
+  onSave,
+  renderPreview
+}: EditableFieldProps) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value == null ? "" : String(value));
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    setDraft(value == null ? "" : String(value));
+    setEditing(false);
+  }, [value]);
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      await onSave(draft);
+      setEditing(false);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!editing) {
+    return (
+      <button
+        type="button"
+        onClick={() => setEditing(true)}
+        className="w-full text-left"
+      >
+        <DetailShell label={label}>
+          {draft && renderPreview ? (
+            renderPreview(draft)
+          ) : (
+            <div className="flex items-center justify-between gap-3">
+              <span
+                className={`text-[15px] font-semibold ${
+                  draft ? "text-[#15313f]" : "text-[#7c909b]"
+                }`}
+              >
+                {draft || placeholder}
+              </span>
+            </div>
+          )}
+        </DetailShell>
+      </button>
+    );
+  }
+
+  return (
+    <DetailShell label={label}>
+      <div className="grid gap-2">
+        {type === "textarea" ? (
+          <textarea
+            value={draft}
+            onChange={(event) => setDraft(event.currentTarget.value)}
+            className="min-h-28 rounded-xl border border-[rgba(21,49,63,0.12)] bg-white px-3 py-2 text-[14px] text-[#15313f] outline-none"
+          />
+        ) : type === "select" ? (
+          <select
+            value={draft}
+            onChange={(event) => setDraft(event.currentTarget.value)}
+            className="rounded-xl border border-[rgba(21,49,63,0.12)] bg-white px-3 py-2 text-[14px] text-[#15313f] outline-none"
+          >
+            <option value="">None</option>
+            {options.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <input
+            type={type}
+            value={draft}
+            onChange={(event) => setDraft(event.currentTarget.value)}
+            className="rounded-xl border border-[rgba(21,49,63,0.12)] bg-white px-3 py-2 text-[14px] text-[#15313f] outline-none"
+          />
+        )}
+
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={save}
+            disabled={saving}
+            className="inline-flex items-center gap-1 rounded-xl bg-[#15313f] px-3 py-2 text-[12px] font-bold uppercase tracking-[0.08em] text-white"
+          >
+            <Save size={13} strokeWidth={2.2} />
+            <span>{saving ? "Saving" : "Save"}</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setDraft(value == null ? "" : String(value));
+              setEditing(false);
+            }}
+            className="rounded-xl border border-[rgba(21,49,63,0.12)] bg-white px-3 py-2 text-[12px] font-bold uppercase tracking-[0.08em] text-[#526773]"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    </DetailShell>
   );
 }
 
 export default function FeatureDetailsModal({
   feature,
-  onClose
+  onClose,
+  onFeatureChange = () => {}
 }: FeatureDetailsModalProps) {
+  const [draftFeature, setDraftFeature] = useState<FeatureDetails | null>(feature);
   const [galleryIndex, setGalleryIndex] = useState<number | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [imageSaving, setImageSaving] = useState(false);
+  const [pendingDeleteImageSrc, setPendingDeleteImageSrc] = useState<string | null>(null);
+  const [dragActive, setDragActive] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
+    setDraftFeature(feature);
     setGalleryIndex(null);
+    setError(null);
+    setPendingDeleteImageSrc(null);
   }, [feature]);
 
-  if (!feature) {
+  const images = draftFeature?.images ?? [];
+  const primaryImage = images[0];
+  const currentGalleryPosition = useMemo(() => {
+    if (galleryIndex === null || images.length === 0) {
+      return null;
+    }
+
+    return ((galleryIndex % images.length) + images.length) % images.length;
+  }, [galleryIndex, images.length]);
+  const galleryImage =
+    currentGalleryPosition === null ? null : images[currentGalleryPosition];
+  const findShortLabel = getFindShortLabel(draftFeature);
+
+  if (!draftFeature) {
     return null;
   }
 
-  const images = feature.images ?? [];
-  const primaryImage = images[0];
-  const galleryImage =
-    galleryIndex === null ? null : images[((galleryIndex % images.length) + images.length) % images.length];
-  const currentGalleryPosition =
-    galleryIndex === null ? null : ((galleryIndex % images.length) + images.length) % images.length;
-  const eventDate = formatDate(feature.eventDate);
-  const findDate = formatDate(feature.findDate);
-  const visitedDate = formatDate(feature.dateVisited);
-  const duration = formatDuration(feature.durationMinutes);
+  const pushUpdate = (updatedFeature: FeatureDetails) => {
+    setDraftFeature(updatedFeature);
+    onFeatureChange(updatedFeature);
+  };
+
+  const patchFeature = async (payload: Record<string, unknown>) => {
+    setError(null);
+
+    const response = await fetch(`/api/features/${draftFeature.kind}/${draftFeature.id}`, {
+      method: "PATCH",
+      headers: {
+        "content-type": "application/json"
+      },
+      body: JSON.stringify(payload)
+    });
+
+    if (!response.ok) {
+      const body = await response.json().catch(() => null);
+      throw new Error(body?.error ?? "Failed to update feature");
+    }
+
+    const body = await response.json();
+    pushUpdate(body.feature);
+  };
+
+  const saveField = async (payload: Record<string, unknown>) => {
+    try {
+      await patchFeature(payload);
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : "Failed to save");
+      throw saveError;
+    }
+  };
+
+  const uploadFiles = async (files: File[]) => {
+    if (files.length === 0) {
+      return;
+    }
+
+    setImageSaving(true);
+    setError(null);
+
+    try {
+      for (const file of files) {
+        const formData = new FormData();
+        formData.append("file", file);
+
+        const uploadResponse = await fetch("/api/uploads/images", {
+          method: "POST",
+          body: formData
+        });
+
+        if (!uploadResponse.ok) {
+          const body = await uploadResponse.json().catch(() => null);
+          throw new Error(body?.error ?? `Failed to upload ${file.name}`);
+        }
+
+        const upload = await uploadResponse.json();
+        await patchFeature({
+          addImage: {
+            src: upload.src,
+            altText: upload.altText ?? file.name,
+            caption: ""
+          }
+        });
+      }
+    } catch (uploadError) {
+      setError(uploadError instanceof Error ? uploadError.message : "Failed to upload image");
+    } finally {
+      setImageSaving(false);
+      setDragActive(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+    }
+  };
+
+  const handleDrop = async (event: DragEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    setDragActive(false);
+
+    const files = Array.from(event.dataTransfer.files ?? []).filter((file) =>
+      file.type.startsWith("image/")
+    );
+    if (files.length === 0) {
+      return;
+    }
+
+    await uploadFiles(files);
+  };
+
+  const handleDeleteImage = async (src: string) => {
+    try {
+      await patchFeature({
+        removeImageSrc: src
+      });
+      setPendingDeleteImageSrc(null);
+      if (galleryImage?.src === src) {
+        setGalleryIndex(null);
+      }
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : "Failed to remove image");
+    }
+  };
 
   return (
     <div className="fixed inset-0 z-[1200] flex items-center justify-center bg-[rgba(7,18,24,0.58)] p-4 backdrop-blur-[2px]">
@@ -116,35 +405,47 @@ export default function FeatureDetailsModal({
           <div className="grid gap-0 lg:grid-cols-[1.2fr_0.8fr]">
             <div className="border-b border-[rgba(21,49,63,0.08)] p-6 lg:border-b-0 lg:border-r">
               <div className="mb-5 flex items-center gap-2 text-[12px] font-bold uppercase tracking-[0.08em] text-[#6a7d88]">
-                {feature.kind === "event" ? (
+                {draftFeature.kind === "event" ? (
                   <Radar size={15} strokeWidth={2.1} />
-                ) : feature.kind === "find" ? (
+                ) : draftFeature.kind === "find" ? (
                   <Coins size={15} strokeWidth={2.1} />
                 ) : (
                   <MapPinned size={15} strokeWidth={2.1} />
                 )}
-                <span>{feature.kind}</span>
+                <span>{draftFeature.kind}</span>
+                {findShortLabel ? (
+                  <span className="inline-flex min-w-7 items-center justify-center rounded-full bg-[#15313f] px-2 py-1 text-[11px] font-extrabold tracking-normal text-white">
+                    {findShortLabel}
+                  </span>
+                ) : null}
               </div>
 
-              <h2 className="mb-3 pr-14 text-3xl font-semibold leading-tight text-[#15313f]">
-                {feature.title}
-              </h2>
+              <EditableField
+                label="Title"
+                value={draftFeature.title}
+                onSave={(value) => saveField({ title: value })}
+              />
 
-              {feature.description ? (
-                <p className="mb-6 whitespace-pre-line text-[15px] leading-7 text-[#445965]">
-                  {feature.description}
-                </p>
-              ) : null}
+              <div className="mt-4">
+                <EditableField
+                  label="Description"
+                  value={draftFeature.description}
+                  type="textarea"
+                  placeholder="Click to add a description"
+                  onSave={(value) => saveField({ description: value })}
+                  renderPreview={(value) => <div className="grid gap-3">{renderRichText(value)}</div>}
+                />
+              </div>
 
               {primaryImage ? (
                 <button
                   type="button"
                   onClick={() => setGalleryIndex(0)}
-                  className="block w-full overflow-hidden rounded-[24px] border border-[rgba(21,49,63,0.08)] bg-white text-left shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]"
+                  className="mt-4 block w-full overflow-hidden rounded-[24px] border border-[rgba(21,49,63,0.08)] bg-white text-left shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]"
                 >
                   <img
                     src={primaryImage.src}
-                    alt={primaryImage.altText ?? feature.title}
+                    alt={primaryImage.altText ?? draftFeature.title}
                     className="h-[360px] w-full object-cover"
                   />
                   {primaryImage.caption ? (
@@ -153,8 +454,11 @@ export default function FeatureDetailsModal({
                     </div>
                   ) : null}
                 </button>
-              ) : null}
-
+              ) : (
+                <div className="mt-4 rounded-[24px] border border-dashed border-[rgba(21,49,63,0.16)] bg-white/50 px-5 py-10 text-center text-[14px] text-[#6a7d88]">
+                  No images yet. Add one from the right panel.
+                </div>
+              )}
             </div>
 
             <div className="grid content-start gap-3 p-6">
@@ -163,41 +467,205 @@ export default function FeatureDetailsModal({
                 <span>Details</span>
               </div>
 
-              <DetailRow label="Event Date" value={eventDate} />
-              <DetailRow label="Find Date" value={findDate} />
-              <DetailRow label="Visited" value={visitedDate} />
-              <DetailRow label="Duration" value={duration} />
-              <DetailRow label="Device" value={feature.deviceUsed} />
-              <DetailRow label="Mode" value={feature.deviceMode} />
-              <DetailRow label="Age" value={feature.ageLabel} />
-              <DetailRow label="Type" value={feature.type} />
-              <DetailRow label="Metal" value={feature.metal} />
-              <DetailRow
-                label="Count"
-                value={feature.itemCount ? String(feature.itemCount) : null}
-              />
+              {draftFeature.kind === "event" ? (
+                <>
+                  <EditableField
+                    label="Event Date"
+                    value={draftFeature.eventDate}
+                    type="date"
+                    renderPreview={(value) => (
+                      <span className="text-[15px] font-semibold text-[#15313f]">
+                        {formatDateOnly(value)}
+                      </span>
+                    )}
+                    onSave={(value) => saveField({ eventDate: value })}
+                  />
+                  <EditableField
+                    label="Duration (minutes)"
+                    value={draftFeature.durationMinutes}
+                    type="number"
+                    placeholder="Add duration"
+                    onSave={(value) => saveField({ durationMinutes: value })}
+                  />
+                  <EditableField
+                    label="Device"
+                    value={draftFeature.deviceUsed}
+                    placeholder="Add device"
+                    onSave={(value) => saveField({ deviceUsed: value })}
+                  />
+                  <EditableField
+                    label="Mode"
+                    value={draftFeature.deviceMode}
+                    placeholder="Add mode"
+                    onSave={(value) => saveField({ deviceMode: value })}
+                  />
+                </>
+              ) : null}
+
+              {draftFeature.kind === "find" ? (
+                <>
+                  <EditableField
+                    label="Find Date"
+                    value={draftFeature.findDate}
+                    type="date"
+                    renderPreview={(value) => (
+                      <span className="text-[15px] font-semibold text-[#15313f]">
+                        {formatDateOnly(value)}
+                      </span>
+                    )}
+                    onSave={(value) => saveField({ findDate: value })}
+                  />
+                  <EditableField
+                    label="Age"
+                    value={draftFeature.ageLabel}
+                    placeholder="Add age"
+                    onSave={(value) => saveField({ ageLabel: value })}
+                  />
+                  <EditableField
+                    label="Type"
+                    value={draftFeature.type}
+                    type="select"
+                    options={[
+                      { label: "Coin", value: "coin" },
+                      { label: "Ring", value: "ring" },
+                      { label: "Jewelry", value: "jewelry" },
+                      { label: "Artifact", value: "artifact" },
+                      { label: "Other", value: "other" }
+                    ]}
+                    onSave={(value) => saveField({ type: value })}
+                  />
+                  <EditableField
+                    label="Metal"
+                    value={draftFeature.metal}
+                    type="select"
+                    options={[
+                      { label: "Copper", value: "C" },
+                      { label: "Silver", value: "S" },
+                      { label: "Gold", value: "G" }
+                    ]}
+                    onSave={(value) => saveField({ metal: value })}
+                  />
+                  <EditableField
+                    label="Count"
+                    value={draftFeature.itemCount}
+                    type="number"
+                    placeholder="Add count"
+                    onSave={(value) => saveField({ itemCount: value })}
+                  />
+                </>
+              ) : null}
+
+              {draftFeature.kind === "prospect" ? (
+                <>
+                  <EditableField
+                    label="Age"
+                    value={draftFeature.ageLabel}
+                    placeholder="Add age"
+                    onSave={(value) => saveField({ ageLabel: value })}
+                  />
+                  <EditableField
+                    label="Visited"
+                    value={draftFeature.dateVisited}
+                    type="date"
+                    placeholder="Add visit date"
+                    renderPreview={(value) => (
+                      <span className="text-[15px] font-semibold text-[#15313f]">
+                        {formatDateOnly(value)}
+                      </span>
+                    )}
+                    onSave={(value) => saveField({ dateVisited: value })}
+                  />
+                </>
+              ) : null}
 
               <div className="mt-2 inline-flex items-center gap-2 text-[12px] font-bold uppercase tracking-[0.08em] text-[#6a7d88]">
                 <Clock3 size={15} strokeWidth={2.1} />
                 <span>{images.length} image{images.length === 1 ? "" : "s"}</span>
               </div>
 
-              {images.length > 1 ? (
+              {images.length > 0 ? (
                 <div className="mt-2 grid max-h-[420px] grid-cols-2 gap-3 overflow-y-auto pr-1">
                   {images.map((image, index) => (
-                    <button
-                      type="button"
+                    <div
                       key={`${image.src}-${index}`}
-                      onClick={() => setGalleryIndex(index)}
-                      className="overflow-hidden rounded-2xl border border-[rgba(21,49,63,0.08)] bg-white"
+                      className="relative overflow-hidden rounded-2xl border border-[rgba(21,49,63,0.08)] bg-white"
                     >
-                      <img
-                        src={image.src}
-                        alt={image.altText ?? `${feature.title} image ${index + 1}`}
-                        className="aspect-square w-full object-cover"
-                      />
-                    </button>
+                      <button
+                        type="button"
+                        onClick={() => setGalleryIndex(index)}
+                        className="block w-full"
+                      >
+                        <img
+                          src={image.src}
+                          alt={image.altText ?? `${draftFeature.title} image ${index + 1}`}
+                          className="aspect-square w-full object-cover"
+                        />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setPendingDeleteImageSrc(image.src);
+                        }}
+                        className="absolute right-2 top-2 inline-flex h-8 w-8 items-center justify-center rounded-full bg-[rgba(7,18,24,0.72)] text-white"
+                        aria-label="Delete image"
+                      >
+                        <Trash2 size={14} strokeWidth={2.2} />
+                      </button>
+                    </div>
                   ))}
+                </div>
+              ) : null}
+
+              <div className="mt-2">
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  onDragOver={(event) => {
+                    event.preventDefault();
+                    setDragActive(true);
+                  }}
+                  onDragLeave={() => setDragActive(false)}
+                  onDrop={(event) => {
+                    void handleDrop(event);
+                  }}
+                  className={`mb-4 flex w-full flex-col items-center justify-center rounded-2xl border border-dashed px-4 py-6 text-center transition ${
+                    dragActive
+                      ? "border-[#15313f] bg-[rgba(21,49,63,0.08)]"
+                      : "border-[rgba(21,49,63,0.18)] bg-[rgba(247,250,252,0.9)]"
+                  }`}
+                >
+                  <ImageUp size={20} className="mb-2 text-[#15313f]" strokeWidth={2.1} />
+                  <span className="text-sm font-semibold text-[#15313f]">
+                    Drop image{imageSaving ? "s" : ""} here
+                  </span>
+                  <span className="mt-1 text-xs text-[#6a7d88]">
+                    or click to upload one or more images
+                  </span>
+                </button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  multiple
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(event) => {
+                    const files = Array.from(event.currentTarget.files ?? []);
+                    if (files.length > 0) {
+                      void uploadFiles(files);
+                    }
+                  }}
+                />
+                {imageSaving ? (
+                  <div className="text-xs font-bold uppercase tracking-[0.08em] text-[#6a7d88]">
+                    Uploading images...
+                  </div>
+                ) : null}
+              </div>
+
+              {error ? (
+                <div className="rounded-2xl border border-[rgba(161,39,39,0.18)] bg-[rgba(255,240,240,0.84)] px-4 py-3 text-[13px] text-[#8a2b2b]">
+                  {error}
                 </div>
               ) : null}
             </div>
@@ -230,13 +698,13 @@ export default function FeatureDetailsModal({
           <div className="w-full max-w-6xl overflow-hidden rounded-[28px] border border-white/12 bg-[rgba(12,21,28,0.92)] shadow-[0_30px_90px_rgba(0,0,0,0.4)]">
             <img
               src={galleryImage.src}
-              alt={galleryImage.altText ?? feature.title}
+              alt={galleryImage.altText ?? draftFeature.title}
               className="max-h-[78vh] w-full object-contain"
             />
 
             <div className="flex items-center justify-between gap-4 border-t border-white/10 px-5 py-4 text-white/80 max-[700px]:flex-col max-[700px]:items-start">
               <div className="text-sm">
-                {galleryImage.caption ?? galleryImage.altText ?? feature.title}
+                {galleryImage.caption ?? galleryImage.altText ?? draftFeature.title}
               </div>
               <div className="text-xs font-bold uppercase tracking-[0.08em] text-white/60">
                 {(currentGalleryPosition ?? 0) + 1} / {images.length}
@@ -254,6 +722,33 @@ export default function FeatureDetailsModal({
               <ChevronRight size={22} strokeWidth={2.2} />
             </button>
           ) : null}
+        </div>
+      ) : null}
+
+      {pendingDeleteImageSrc ? (
+        <div className="fixed inset-0 z-[1400] flex items-center justify-center bg-[rgba(7,18,24,0.58)] p-4 backdrop-blur-[2px]">
+          <div className="w-full max-w-md rounded-[24px] border border-[rgba(255,255,255,0.18)] bg-[linear-gradient(180deg,#f8fbfc_0%,#eef4f7_100%)] p-6 shadow-[0_30px_90px_rgba(7,18,24,0.35)]">
+            <h3 className="text-lg font-semibold text-[#15313f]">Delete image?</h3>
+            <div className="mt-5 flex gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  void handleDeleteImage(pendingDeleteImageSrc);
+                }}
+                className="inline-flex items-center gap-2 rounded-xl bg-[#8a2b2b] px-4 py-2 text-[12px] font-bold uppercase tracking-[0.08em] text-white"
+              >
+                <Trash2 size={14} strokeWidth={2.2} />
+                <span>Delete</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setPendingDeleteImageSrc(null)}
+                className="rounded-xl border border-[rgba(21,49,63,0.12)] bg-white px-4 py-2 text-[12px] font-bold uppercase tracking-[0.08em] text-[#526773]"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
         </div>
       ) : null}
     </div>

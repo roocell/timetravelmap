@@ -61,6 +61,10 @@ function getNumericParam(searchParams, name, fallback) {
 }
 
 function createTileLayer(url, opacity) {
+  if (typeof url !== "string" || url.length === 0) {
+    return null;
+  }
+
   const isRemoteImagery = url.includes("arcgisonline");
 
   return L.tileLayer(url, {
@@ -86,6 +90,54 @@ function normalizeLeafletColor(value, fallback) {
   }
 
   return fallback;
+}
+
+function getFindShortLabel(find) {
+  const type = String(find?.type ?? "").toLowerCase();
+  const metal = String(find?.metal ?? "").toUpperCase();
+  const title = String(find?.title ?? "").toLowerCase();
+  const description = String(find?.description ?? "").toLowerCase();
+
+  if (type === "ring" || title.includes("ring") || description.includes("ring")) {
+    return "R";
+  }
+
+  if (metal === "C") {
+    return "C";
+  }
+
+  if (metal === "S" || title.includes("silver") || description.includes("silver")) {
+    return "S";
+  }
+
+  if (metal === "G" || title.includes("gold") || description.includes("gold")) {
+    return "G";
+  }
+
+  return null;
+}
+
+function createFindMarker(find) {
+  const shortLabel = getFindShortLabel(find);
+
+  if (!shortLabel) {
+    return L.circleMarker([find.latitude, find.longitude], {
+      radius: 7,
+      color: "#1f6f43",
+      fillColor: "#39a96b",
+      fillOpacity: 0.9,
+      weight: 2
+    });
+  }
+
+  const icon = L.divIcon({
+    className: "",
+    html: `<div style="display:flex;height:24px;width:24px;align-items:center;justify-content:center;border-radius:9999px;border:2px solid #1f6f43;background:#39a96b;color:#fff;font-size:12px;font-weight:800;line-height:1;box-shadow:0 4px 12px rgba(31,111,67,0.28);">${shortLabel}</div>`,
+    iconSize: [24, 24],
+    iconAnchor: [12, 12]
+  });
+
+  return L.marker([find.latitude, find.longitude], { icon });
 }
 
 function loadSavedMapView() {
@@ -130,6 +182,7 @@ export default function TimeTravelMap({
   const mapElementRef = useRef(null);
   const layerRefs = useRef([]);
   const datasetLayerRefs = useRef(new Map());
+  const featureOverridesRef = useRef({});
   const mapRef = useRef(null);
   const markerRef = useRef(null);
   const currentLocationMarkerRef = useRef(null);
@@ -140,6 +193,16 @@ export default function TimeTravelMap({
   const [layersVisible, setLayersVisible] = useState(true);
   const [sliderValue, setSliderValue] = useState(1);
   const [selectedFeature, setSelectedFeature] = useState(null);
+  const [featureOverrides, setFeatureOverrides] = useState({});
+
+  useEffect(() => {
+    featureOverridesRef.current = featureOverrides;
+  }, [featureOverrides]);
+
+  const openFeature = (feature) => {
+    const overrideKey = `${feature.kind}:${feature.id}`;
+    setSelectedFeature(featureOverridesRef.current[overrideKey] ?? feature);
+  };
 
   const persistMapView = () => {
     if (typeof window === "undefined") {
@@ -170,8 +233,16 @@ export default function TimeTravelMap({
       return null;
     }
 
+    const layerUrl = layerUrls[layerIndex];
+    if (typeof layerUrl !== "string" || layerUrl.length === 0) {
+      return null;
+    }
+
     if (!layerRefs.current[layerIndex]) {
-      const layer = createTileLayer(layerUrls[layerIndex], 0);
+      const layer = createTileLayer(layerUrl, 0);
+      if (!layer) {
+        return null;
+      }
       layer.on("tileerror", () => {});
       layer.addTo(map);
       layerRefs.current[layerIndex] = layer;
@@ -431,7 +502,8 @@ export default function TimeTravelMap({
           });
 
           geoJsonLayer.on("click", () => {
-            setSelectedFeature({
+            openFeature({
+              id: event.id,
               kind: "event",
               title: event.title,
               eventDate: event.eventDate,
@@ -446,16 +518,11 @@ export default function TimeTravelMap({
         }
 
         for (const find of payload.finds ?? []) {
-          const marker = L.circleMarker([find.latitude, find.longitude], {
-            radius: 7,
-            color: "#8f2d56",
-            fillColor: "#d94c86",
-            fillOpacity: 0.9,
-            weight: 2
-          });
+          const marker = createFindMarker(find);
 
           marker.on("click", () => {
-            setSelectedFeature({
+            openFeature({
+              id: find.id,
               kind: "find",
               title: find.title,
               findDate: find.findDate,
@@ -501,7 +568,8 @@ export default function TimeTravelMap({
           });
 
           marker.on("click", () => {
-            setSelectedFeature({
+            openFeature({
+              id: prospect.id,
               kind: "prospect",
               title: prospect.title,
               ageLabel: prospect.ageLabel,
@@ -608,7 +676,17 @@ export default function TimeTravelMap({
         onToggleProspects={onToggleProspects}
       />
 
-      <FeatureDetailsModal feature={selectedFeature} onClose={() => setSelectedFeature(null)} />
+      <FeatureDetailsModal
+        feature={selectedFeature}
+        onClose={() => setSelectedFeature(null)}
+        onFeatureChange={(feature) => {
+          setSelectedFeature(feature);
+          setFeatureOverrides((current) => ({
+            ...current,
+            [`${feature.kind}:${feature.id}`]: feature
+          }));
+        }}
+      />
     </main>
   );
 }
