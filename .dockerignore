@@ -1,0 +1,13 @@
+.git
+.gitignore
+.next
+node_modules
+npm-debug.log
+.env
+.env.local
+kml
+exports
+tools
+public/images
+public/tiles
+tsconfig.tsbuildinfo

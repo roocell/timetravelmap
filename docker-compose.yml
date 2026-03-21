@@ -1,0 +1,25 @@
+services:
+  web:
+    build:
+      context: .
+      args:
+        NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY}
+        NEXT_PUBLIC_STACK_PROJECT_ID: ${NEXT_PUBLIC_STACK_PROJECT_ID}
+        NEXT_PUBLIC_STACK_PUBLISHABLE_CLIENT_KEY: ${NEXT_PUBLIC_STACK_PUBLISHABLE_CLIENT_KEY}
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DATABASE_URL: ${DATABASE_URL}
+      NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
+      NEXT_PUBLIC_STACK_PROJECT_ID: ${NEXT_PUBLIC_STACK_PROJECT_ID}
+      NEXT_PUBLIC_STACK_PUBLISHABLE_CLIENT_KEY: ${NEXT_PUBLIC_STACK_PUBLISHABLE_CLIENT_KEY}
+      STACK_SECRET_SERVER_KEY: ${STACK_SECRET_SERVER_KEY}
+    ports:
+      - "3000:3000"
+    volumes:
+      - /home/roocell/code/timetravelmap/public/tiles:/app/public/tiles:ro
+      - /home/roocell/code/timetravelmap/public/images:/app/public/images
+    restart: unless-stopped
