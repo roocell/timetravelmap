@@ -8,6 +8,7 @@ import pg from "pg";
 import { PrismaClient, Prisma } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { XMLParser } from "fast-xml-parser";
+import { StackServerApp } from "../node_modules/@stackframe/stack/dist/lib/stack-app/apps/interfaces/server-app.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -17,8 +18,13 @@ const PUBLIC_DIR = path.join(ROOT, "public");
 const IMAGE_MANIFEST_PATH = path.join(PUBLIC_DIR, "images", "manifest.json");
 const IMAGE_SIZE = "2048";
 const PROSPECTS_FILE = "Prospects.kml";
-const requestedFiles = process.argv.slice(2);
-const DATE_PATTERN = /\b(\d{4}-\d{2}-\d{2})\b/;
+const rawArgs = process.argv.slice(2);
+const requestedFiles = rawArgs.filter((value) => !value.startsWith("--"));
+const ownerEmailArg =
+  rawArgs.find((value) => value.startsWith("--owner-email="))?.slice("--owner-email=".length) ??
+  process.env.STACK_IMPORT_OWNER_EMAIL ??
+  null;
+const DATE_PATTERN = /\b(\d{4,5}-\d{2}-\d{2})\b/;
 const SLASH_DATE_PATTERN = /\b(\d{1,2})\/(\d{1,2})\/(\d{4})\b/;
 const MONTH_YEAR_PATTERN =
   /\b(january|february|march|april|may|june|july|august|september|october|november|december)\s+(\d{4})\b/i;
@@ -112,6 +118,25 @@ const prisma = new PrismaClient({
   log: ["error"]
 });
 
+const stackServerApp =
+  process.env.NEXT_PUBLIC_STACK_PROJECT_ID &&
+  process.env.NEXT_PUBLIC_STACK_PUBLISHABLE_CLIENT_KEY &&
+  process.env.STACK_SECRET_SERVER_KEY
+    ? new StackServerApp({
+        tokenStore: "nextjs-cookie",
+        projectId: process.env.NEXT_PUBLIC_STACK_PROJECT_ID,
+        publishableClientKey: process.env.NEXT_PUBLIC_STACK_PUBLISHABLE_CLIENT_KEY,
+        secretServerKey: process.env.STACK_SECRET_SERVER_KEY,
+        urls: {
+          handler: "/handler",
+          home: "/",
+          afterSignIn: "/",
+          afterSignUp: "/",
+          afterSignOut: "/"
+        }
+      })
+    : null;
+
 function asArray(value) {
   if (value == null) {
     return [];
@@ -151,17 +176,52 @@ function htmlToLines(html) {
     .filter(Boolean);
 }
 
+function normalizeIsoDateString(value) {
+  const match = String(value ?? "").match(/^(\d{4,5})-(\d{2})-(\d{2})$/);
+  if (!match) {
+    return null;
+  }
+
+  let [, year, month, day] = match;
+  if (year.length === 5 && year.startsWith("20")) {
+    year = year.slice(1);
+  }
+
+  if (!/^\d{4}$/.test(year)) {
+    return null;
+  }
+
+  const candidate = `${year}-${month}-${day}`;
+  const date = new Date(`${candidate}T00:00:00.000Z`);
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+
+  if (date.toISOString().slice(0, 10) !== candidate) {
+    return null;
+  }
+
+  return candidate;
+}
+
 function findDateString(text) {
-  return String(text ?? "").match(DATE_PATTERN)?.[1] ?? null;
+  const match = String(text ?? "").match(DATE_PATTERN)?.[1] ?? null;
+  return match ? normalizeIsoDateString(match) : null;
 }
 
 function stripLeadingDate(text) {
-  return String(text ?? "").replace(/^\s*\d{4}-\d{2}-\d{2}\s*/, "").trim();
+  return String(text ?? "").replace(/^\s*\d{4,5}-\d{2}-\d{2}\s*/, "").trim();
 }
 
 function parseDateValue(text, fallback = null) {
-  const dateString = findDateString(text) ?? fallback;
+  const fallbackDate = normalizeIsoDateString(fallback);
+  const dateString = findDateString(text) ?? fallbackDate;
   return dateString ? new Date(`${dateString}T00:00:00.000Z`) : null;
+}
+
+function inferSourceFileYearDate(sourceFile) {
+  const year = String(sourceFile ?? "").match(/\b(20\d{2})\b/)?.[1];
+  return year ? `${year}-01-01` : null;
 }
 
 function parseFlexibleDateValue(text) {
@@ -322,6 +382,86 @@ function polygonToWkt(placemark) {
 
   const ring = points.map(([lon, lat]) => `${lon} ${lat}`).join(", ");
   return `MULTIPOLYGON(((${ring})))`;
+}
+
+function lineStringToThinPolygonWkt(placemark, halfWidthMeters = 4) {
+  const points = parseCoordinateString(placemark.LineString?.coordinates);
+  if (points.length < 2) {
+    return null;
+  }
+
+  const averageLatRadians =
+    (points.reduce((total, [, lat]) => total + lat, 0) / points.length) * (Math.PI / 180);
+  const metersPerLon = 111320 * Math.cos(averageLatRadians);
+  const metersPerLat = 110540;
+
+  if (!Number.isFinite(metersPerLon) || metersPerLon <= 0) {
+    return null;
+  }
+
+  const projected = points.map(([lon, lat]) => ({
+    x: lon * metersPerLon,
+    y: lat * metersPerLat
+  }));
+
+  const segmentNormals = [];
+  for (let index = 0; index < projected.length - 1; index += 1) {
+    const start = projected[index];
+    const end = projected[index + 1];
+    const dx = end.x - start.x;
+    const dy = end.y - start.y;
+    const length = Math.hypot(dx, dy);
+
+    if (!Number.isFinite(length) || length === 0) {
+      segmentNormals.push({ x: 0, y: 0 });
+      continue;
+    }
+
+    segmentNormals.push({
+      x: -dy / length,
+      y: dx / length
+    });
+  }
+
+  const leftSide = [];
+  const rightSide = [];
+
+  for (let index = 0; index < projected.length; index += 1) {
+    const point = projected[index];
+    const previous = segmentNormals[index - 1] ?? segmentNormals[index] ?? { x: 0, y: 0 };
+    const next = segmentNormals[index] ?? segmentNormals[index - 1] ?? { x: 0, y: 0 };
+    let normalX = previous.x + next.x;
+    let normalY = previous.y + next.y;
+    const normalLength = Math.hypot(normalX, normalY);
+
+    if (!Number.isFinite(normalLength) || normalLength === 0) {
+      normalX = next.x || previous.x;
+      normalY = next.y || previous.y;
+    } else {
+      normalX /= normalLength;
+      normalY /= normalLength;
+    }
+
+    leftSide.push([
+      (point.x + normalX * halfWidthMeters) / metersPerLon,
+      (point.y + normalY * halfWidthMeters) / metersPerLat
+    ]);
+    rightSide.push([
+      (point.x - normalX * halfWidthMeters) / metersPerLon,
+      (point.y - normalY * halfWidthMeters) / metersPerLat
+    ]);
+  }
+
+  const ring = ensureClosedRing([...leftSide, ...rightSide.reverse()]);
+  if (ring.length < 4) {
+    return null;
+  }
+
+  return `MULTIPOLYGON(((${ring.map(([lon, lat]) => `${lon} ${lat}`).join(", ")})))`;
+}
+
+function eventGeometryToWkt(placemark) {
+  return polygonToWkt(placemark) ?? lineStringToThinPolygonWkt(placemark);
 }
 
 function pointToLatLng(placemark) {
@@ -607,19 +747,36 @@ async function ensureImageRecords(imageUrls, sourceName, altText, manifest) {
       continue;
     }
 
-    const storagePath = manifestEntry.file;
+    const legacyStoragePath = manifestEntry.file;
+    const fileName = path.basename(String(legacyStoragePath ?? ""));
+    const storagePath =
+      IMPORT_OWNER_ID && fileName
+        ? `/images/${IMPORT_OWNER_ID}/${fileName}`
+        : legacyStoragePath;
+
     const absolutePath = path.join(PUBLIC_DIR, storagePath.replace(/^\//, ""));
+    const legacyAbsolutePath = path.join(PUBLIC_DIR, String(legacyStoragePath).replace(/^\//, ""));
     let stats;
     try {
       stats = await fs.stat(absolutePath);
     } catch {
-      console.warn(`Skipping image with missing file ${absolutePath}`);
-      continue;
+      try {
+        stats = await fs.stat(legacyAbsolutePath);
+
+        if (absolutePath !== legacyAbsolutePath) {
+          await fs.mkdir(path.dirname(absolutePath), { recursive: true });
+          await fs.copyFile(legacyAbsolutePath, absolutePath);
+        }
+      } catch {
+        console.warn(`Skipping image with missing file ${absolutePath}`);
+        continue;
+      }
     }
 
     const image = await prisma.image.upsert({
       where: { storagePath },
       update: {
+        ownerId: IMPORT_OWNER_ID,
         originalUrl,
         byteSize: BigInt(stats.size),
         altText: altText || null,
@@ -627,6 +784,7 @@ async function ensureImageRecords(imageUrls, sourceName, altText, manifest) {
         checksumSha256: manifestEntry.sha256 ?? null
       },
       create: {
+        ownerId: IMPORT_OWNER_ID,
         storagePath,
         originalUrl,
         byteSize: BigInt(stats.size),
@@ -646,6 +804,7 @@ async function upsertEvent(input) {
   const rows = await prisma.$queryRaw(
     Prisma.sql`
       insert into timetravelmap.events (
+        owner_id,
         title,
         event_date,
         duration_minutes,
@@ -660,6 +819,7 @@ async function upsertEvent(input) {
         source_placemark_id
       )
       values (
+        ${input.ownerId},
         ${input.title},
         ${input.eventDate},
         ${input.durationMinutes},
@@ -680,6 +840,7 @@ async function upsertEvent(input) {
       )
       on conflict (source_file, source_placemark_id) do update
       set
+        owner_id = excluded.owner_id,
         title = excluded.title,
         event_date = excluded.event_date,
         duration_minutes = excluded.duration_minutes,
@@ -701,6 +862,7 @@ async function upsertFind(input) {
   const rows = await prisma.$queryRaw(
     Prisma.sql`
       insert into timetravelmap.finds (
+        owner_id,
         event_id,
         title,
         find_date,
@@ -717,6 +879,7 @@ async function upsertFind(input) {
         source_placemark_id
       )
       values (
+        ${input.ownerId},
         ${input.eventId},
         ${input.title},
         ${input.findDate},
@@ -734,6 +897,7 @@ async function upsertFind(input) {
       )
       on conflict (source_file, source_placemark_id) do update
       set
+        owner_id = excluded.owner_id,
         event_id = excluded.event_id,
         title = excluded.title,
         find_date = excluded.find_date,
@@ -753,15 +917,62 @@ async function upsertFind(input) {
   return rows[0]?.id ?? null;
 }
 
+async function upsertProspect(input) {
+  const rows = await prisma.$queryRaw(
+    Prisma.sql`
+      insert into timetravelmap.prospects (
+        owner_id,
+        title,
+        age_label,
+        age_start_year,
+        age_end_year,
+        description,
+        latitude,
+        longitude,
+        date_visited,
+        source_file,
+        source_placemark_id
+      )
+      values (
+        ${input.ownerId},
+        ${input.title},
+        ${input.ageLabel},
+        ${input.ageStartYear},
+        ${input.ageEndYear},
+        ${input.description},
+        ${input.latitude},
+        ${input.longitude},
+        ${input.dateVisited},
+        ${input.sourceFile},
+        ${input.sourcePlacemarkId}
+      )
+      on conflict (source_file, source_placemark_id) do update
+      set
+        owner_id = excluded.owner_id,
+        title = excluded.title,
+        age_label = excluded.age_label,
+        age_start_year = excluded.age_start_year,
+        age_end_year = excluded.age_end_year,
+        description = excluded.description,
+        latitude = excluded.latitude,
+        longitude = excluded.longitude,
+        date_visited = excluded.date_visited
+      returning id
+    `
+  );
+
+  return rows[0]?.id ?? null;
+}
+
 function buildEventRecord(placemark, sourceFile, style) {
   const originalTitle = String(placemark.name ?? "").trim();
   const lines = htmlToLines(placemark.description);
-  const eventDate = parseDateValue(originalTitle);
+  const eventDate = parseDateValue(originalTitle, inferSourceFileYearDate(sourceFile));
   if (!eventDate) {
     return null;
   }
 
-  const areaWkt = polygonToWkt(placemark);
+  const areaWkt = eventGeometryToWkt(placemark);
   if (!areaWkt) {
     return null;
   }
@@ -770,6 +981,7 @@ function buildEventRecord(placemark, sourceFile, style) {
   const descriptionLines = cleanEventDescriptionLines(lines, header);
   const title = stripLeadingDate(originalTitle) || originalTitle;
   return {
+    ownerId: IMPORT_OWNER_ID,
     title,
     eventDate,
     durationMinutes: header.durationMinutes,
@@ -812,6 +1024,7 @@ function buildFindRecord(placemark, sourceFile, currentEventContext) {
   const itemCount = parseCount(originalTitle, `${title}\n${description ?? ""}`);
 
   return {
+    ownerId: IMPORT_OWNER_ID,
     eventId: currentEventContext?.eventId ?? null,
     title,
     findDate,
@@ -847,6 +1060,7 @@ function buildProspectRecord(placemark, sourceFile) {
   const age = parseAge(`${title}\n${createPlainDescription(lines) ?? ""}`);
 
   return {
+    ownerId: IMPORT_OWNER_ID,
     title,
     ageLabel: age.ageLabel,
     ageStartYear: age.ageStartYear,
@@ -855,6 +1069,8 @@ function buildProspectRecord(placemark, sourceFile) {
     latitude: point.latitude,
     longitude: point.longitude,
     dateVisited: dates.dateVisited,
+    sourceFile,
+    sourcePlacemarkId: String(placemark.id ?? "").trim() || null,
     imageUrls: extractImageUrls(placemark),
     sourceName: sourceFile
   };
@@ -938,6 +1154,57 @@ async function pruneFileImports(sourceFile, importedEventIds, importedFindIds) {
   }
 }
 
+async function pruneProspectFileImports(sourceFile, importedProspectIds) {
+  if (importedProspectIds.length === 0) {
+    return;
+  }
+
+  await prisma.prospect.deleteMany({
+    where: {
+      sourceFile,
+      sourcePlacemarkId: {
+        notIn: importedProspectIds
+      }
+    }
+  });
+}
+
+async function resolveImportOwnerId() {
+  if (!ownerEmailArg) {
+    return null;
+  }
+
+  if (!stackServerApp) {
+    throw new Error(
+      "Missing Stack Auth env vars. Set NEXT_PUBLIC_STACK_PROJECT_ID, NEXT_PUBLIC_STACK_PUBLISHABLE_CLIENT_KEY, and STACK_SECRET_SERVER_KEY before importing with --owner-email."
+    );
+  }
+
+  let cursor = undefined;
+
+  for (;;) {
+    const users = await stackServerApp.listUsers(
+      cursor ? { cursor } : undefined
+    );
+    const match = users.find(
+      (user) => String(user.primaryEmail ?? "").toLowerCase() === ownerEmailArg.toLowerCase()
+    );
+    if (match) {
+      return match.id;
+    }
+
+    if (!users.nextCursor) {
+      break;
+    }
+
+    cursor = users.nextCursor;
+  }
+
+  throw new Error(`No Stack user found for ${ownerEmailArg}`);
+}
+
+const IMPORT_OWNER_ID = await resolveImportOwnerId();
+
 async function importFile(fileName, manifest) {
   const filePath = path.join(KML_DIR, fileName);
   const raw = await fs.readFile(filePath, "utf8");
@@ -958,7 +1225,7 @@ async function importFile(fileName, manifest) {
   for (const placemark of placemarks) {
     const style = resolveStyle(placemark.styleUrl, styleIndex);
 
-    if (placemark.Polygon) {
+    if (placemark.Polygon || placemark.LineString) {
       const event = buildEventRecord(placemark, fileName, style);
       if (!event || !event.sourcePlacemarkId) {
         continue;
@@ -1020,30 +1287,19 @@ async function importProspectsFile(fileName, manifest) {
   }
 
   const placemarks = asArray(documentNode.Placemark);
-
-  await prisma.prospectImage.deleteMany();
-  await prisma.prospect.deleteMany();
-
+  const importedProspectIds = [];
   let prospectCount = 0;
 
   for (const placemark of placemarks) {
     const prospect = buildProspectRecord(placemark, fileName);
-    if (!prospect) {
+    if (!prospect || !prospect.sourcePlacemarkId) {
       continue;
     }
 
-    const created = await prisma.prospect.create({
-      data: {
-        title: prospect.title,
-        ageLabel: prospect.ageLabel,
-        ageStartYear: prospect.ageStartYear,
-        ageEndYear: prospect.ageEndYear,
-        description: prospect.description,
-        latitude: prospect.latitude,
-        longitude: prospect.longitude,
-        dateVisited: prospect.dateVisited
-      }
-    });
+    const prospectId = await upsertProspect(prospect);
+    if (!prospectId) {
+      continue;
+    }
 
     const images = await ensureImageRecords(
       prospect.imageUrls,
@@ -1051,9 +1307,12 @@ async function importProspectsFile(fileName, manifest) {
       prospect.title,
       manifest
     );
-    await attachProspectImages(created.id, images);
+    await attachProspectImages(prospectId, images);
+    importedProspectIds.push(prospect.sourcePlacemarkId);
     prospectCount += 1;
   }
+
+  await pruneProspectFileImports(fileName, importedProspectIds);
 
   return {
     fileName,
@@ -1065,6 +1324,12 @@ async function importProspectsFile(fileName, manifest) {
 
 async function main() {
   try {
+    if (ownerEmailArg) {
+      console.log(`Import owner: ${ownerEmailArg} -> ${IMPORT_OWNER_ID}`);
+    } else {
+      console.log("Import owner: none");
+    }
+
     const manifest = await loadImageManifest();
     let files = (await fs.readdir(KML_DIR))
       .filter((fileName) => fileName.endsWith(".kml"))

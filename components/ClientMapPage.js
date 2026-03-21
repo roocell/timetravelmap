@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
+import { useUser } from "@stackframe/stack";
 
 const DATASET_STATE_KEY = "ttm.dataset-state";
 
@@ -42,6 +43,8 @@ function loadDatasetState() {
 }
 
 export default function ClientMapPage() {
+  const user = useUser();
+  const currentUserId = user?.id ?? null;
   const [activeYears, setActiveYears] = useState(() => loadDatasetState().activeYears);
   const [prospectsActive, setProspectsActive] = useState(
     () => loadDatasetState().prospectsActive
@@ -51,28 +54,75 @@ export default function ClientMapPage() {
     prospects: { count: 0, entries: [] },
     loading: true
   });
+  const [datasetDebug, setDatasetDebug] = useState({
+    clientUserId: null,
+    responseStatus: null,
+    responseOk: null,
+    error: null,
+    yearsCount: 0,
+    prospectsCount: 0
+  });
 
   const loadDatasets = async (state = { cancelled: false }) => {
+    if (!currentUserId) {
+      if (!state.cancelled) {
+        setDatasets({
+          years: [],
+          prospects: { count: 0, entries: [] },
+          loading: false
+        });
+        setDatasetDebug({
+          clientUserId: null,
+          responseStatus: null,
+          responseOk: null,
+          error: "No client user",
+          yearsCount: 0,
+          prospectsCount: 0
+        });
+      }
+      return;
+    }
+
     try {
-      const response = await fetch("/api/datasets");
+      const response = await fetch("/api/datasets", {
+        cache: "no-store"
+      });
+      const payload = await response.json().catch(() => null);
       if (!response.ok) {
-        throw new Error("Failed to load datasets");
+        throw new Error(
+          `Failed to load datasets (${response.status})${payload?.error ? `: ${payload.error}` : ""}`
+        );
       }
 
-      const payload = await response.json();
       if (!state.cancelled) {
         setDatasets({
           years: payload.years ?? [],
           prospects: payload.prospects ?? { count: 0, entries: [] },
           loading: false
         });
+        setDatasetDebug({
+          clientUserId: currentUserId,
+          responseStatus: response.status,
+          responseOk: response.ok,
+          error: null,
+          yearsCount: Array.isArray(payload.years) ? payload.years.length : 0,
+          prospectsCount: payload.prospects?.count ?? 0
+        });
       }
-    } catch {
+    } catch (error) {
       if (!state.cancelled) {
         setDatasets({
           years: [],
           prospects: { count: 0, entries: [] },
           loading: false
+        });
+        setDatasetDebug({
+          clientUserId: currentUserId,
+          responseStatus: null,
+          responseOk: false,
+          error: error instanceof Error ? error.message : "Unknown datasets error",
+          yearsCount: 0,
+          prospectsCount: 0
         });
       }
     }
@@ -85,7 +135,14 @@ export default function ClientMapPage() {
     return () => {
       state.cancelled = true;
     };
-  }, []);
+  }, [currentUserId]);
+
+  useEffect(() => {
+    if (!currentUserId) {
+      setActiveYears([]);
+      setProspectsActive(false);
+    }
+  }, [currentUserId]);
 
   useEffect(() => {
     window.localStorage.setItem(
@@ -108,6 +165,7 @@ export default function ClientMapPage() {
       datasets={datasets}
       activeYears={activeYears}
       prospectsActive={prospectsActive}
+      datasetDebug={datasetDebug}
       onDatasetsChanged={() => loadDatasets()}
       onToggleYear={toggleYear}
       onToggleProspects={() => setProspectsActive((current) => !current)}

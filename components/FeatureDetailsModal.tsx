@@ -24,6 +24,7 @@ type FeatureImage = {
 export type FeatureDetails = {
   id: string;
   kind: "event" | "find" | "prospect";
+  ownerId?: string | null;
   title: string;
   description?: string | null;
   eventDate?: string | null;
@@ -47,6 +48,7 @@ export type FeatureDetails = {
 
 type FeatureDetailsModalProps = {
   feature: FeatureDetails | null;
+  currentUserId?: string | null;
   onClose: () => void;
   onFeatureChange?: (feature: FeatureDetails) => void;
   onFeatureDelete?: (feature: FeatureDetails) => void;
@@ -77,6 +79,60 @@ function DetailShell({
       </span>
       {children}
     </div>
+  );
+}
+
+function ReadonlyField({
+  label,
+  value,
+  placeholder = "Not available",
+  renderPreview
+}: {
+  label: string;
+  value?: string | number | null;
+  placeholder?: string;
+  renderPreview?: (value: string) => ReactNode;
+}) {
+  const text = value == null ? "" : String(value);
+
+  return (
+    <DetailShell label={label}>
+      {text && renderPreview ? (
+        renderPreview(text)
+      ) : (
+        <span className={`text-[15px] font-semibold ${text ? "text-[#15313f]" : "text-[#7c909b]"}`}>
+          {text || placeholder}
+        </span>
+      )}
+    </DetailShell>
+  );
+}
+
+function FieldRenderer({
+  editable,
+  editableProps,
+  readonlyProps
+}: {
+  editable: boolean;
+  editableProps: EditableFieldProps;
+  readonlyProps?: {
+    label: string;
+    value?: string | number | null;
+    placeholder?: string;
+    renderPreview?: (value: string) => ReactNode;
+  };
+}) {
+  if (editable) {
+    return <EditableField {...editableProps} />;
+  }
+
+  return (
+    <ReadonlyField
+      label={readonlyProps?.label ?? editableProps.label}
+      value={readonlyProps?.value ?? editableProps.value}
+      placeholder={readonlyProps?.placeholder ?? editableProps.placeholder}
+      renderPreview={readonlyProps?.renderPreview ?? editableProps.renderPreview}
+    />
   );
 }
 
@@ -257,6 +313,7 @@ function EditableField({
 
 export default function FeatureDetailsModal({
   feature,
+  currentUserId = null,
   onClose,
   onFeatureChange = () => {},
   onFeatureDelete = () => {},
@@ -298,9 +355,12 @@ export default function FeatureDetailsModal({
     return null;
   }
 
+  const canEdit = Boolean(draftFeature.ownerId && currentUserId && draftFeature.ownerId === currentUserId);
+
   const pushUpdate = (updatedFeature: FeatureDetails) => {
-    setDraftFeature(updatedFeature);
-    onFeatureChange(updatedFeature);
+    const merged = draftFeature ? { ...draftFeature, ...updatedFeature } : updatedFeature;
+    setDraftFeature(merged);
+    onFeatureChange(merged);
   };
 
   const patchFeature = async (payload: Record<string, unknown>) => {
@@ -458,21 +518,34 @@ export default function FeatureDetailsModal({
                 ) : null}
               </div>
 
-              <EditableField
-                label="Title"
-                value={draftFeature.title}
-                onSave={(value) => saveField({ title: value })}
-              />
+              {canEdit ? (
+                <EditableField
+                  label="Title"
+                  value={draftFeature.title}
+                  onSave={(value) => saveField({ title: value })}
+                />
+              ) : (
+                <ReadonlyField label="Title" value={draftFeature.title} />
+              )}
 
               <div className="mt-4">
-                <EditableField
-                  label="Description"
-                  value={draftFeature.description}
-                  type="textarea"
-                  placeholder="Click to add a description"
-                  onSave={(value) => saveField({ description: value })}
-                  renderPreview={(value) => <div className="grid gap-3">{renderRichText(value)}</div>}
-                />
+                {canEdit ? (
+                  <EditableField
+                    label="Description"
+                    value={draftFeature.description}
+                    type="textarea"
+                    placeholder="Click to add a description"
+                    onSave={(value) => saveField({ description: value })}
+                    renderPreview={(value) => <div className="grid gap-3">{renderRichText(value)}</div>}
+                  />
+                ) : (
+                  <ReadonlyField
+                    label="Description"
+                    value={draftFeature.description}
+                    placeholder="No description"
+                    renderPreview={(value) => <div className="grid gap-3">{renderRichText(value)}</div>}
+                  />
+                )}
               </div>
 
               {primaryImage ? (
@@ -507,111 +580,163 @@ export default function FeatureDetailsModal({
 
               {draftFeature.kind === "event" ? (
                 <>
-                  <EditableField
-                    label="Event Date"
-                    value={draftFeature.eventDate}
-                    type="date"
-                    renderPreview={(value) => (
-                      <span className="text-[15px] font-semibold text-[#15313f]">
-                        {formatDateOnly(value)}
-                      </span>
-                    )}
-                    onSave={(value) => saveField({ eventDate: value })}
+                  <FieldRenderer
+                    editable={canEdit}
+                    editableProps={{
+                      label: "Event Date",
+                      value: draftFeature.eventDate,
+                      type: "date",
+                      onSave: (value) => saveField({ eventDate: value }),
+                      renderPreview: (value) => (
+                        <span className="text-[15px] font-semibold text-[#15313f]">
+                          {formatDateOnly(value)}
+                        </span>
+                      )
+                    }}
                   />
-                  <EditableField
-                    label="Duration (minutes)"
-                    value={draftFeature.durationMinutes}
-                    type="number"
-                    placeholder="Add duration"
-                    onSave={(value) => saveField({ durationMinutes: value })}
+                  <FieldRenderer
+                    editable={canEdit}
+                    editableProps={{
+                      label: "Duration (minutes)",
+                      value: draftFeature.durationMinutes,
+                      type: "number",
+                      placeholder: "Add duration",
+                      onSave: (value) => saveField({ durationMinutes: value })
+                    }}
+                    readonlyProps={{ label: "Duration (minutes)", value: draftFeature.durationMinutes, placeholder: "Not set" }}
                   />
-                  <EditableField
-                    label="Device"
-                    value={draftFeature.deviceUsed}
-                    placeholder="Add device"
-                    onSave={(value) => saveField({ deviceUsed: value })}
+                  <FieldRenderer
+                    editable={canEdit}
+                    editableProps={{
+                      label: "Device",
+                      value: draftFeature.deviceUsed,
+                      placeholder: "Add device",
+                      onSave: (value) => saveField({ deviceUsed: value })
+                    }}
+                    readonlyProps={{ label: "Device", value: draftFeature.deviceUsed, placeholder: "Not set" }}
                   />
-                  <EditableField
-                    label="Mode"
-                    value={draftFeature.deviceMode}
-                    placeholder="Add mode"
-                    onSave={(value) => saveField({ deviceMode: value })}
+                  <FieldRenderer
+                    editable={canEdit}
+                    editableProps={{
+                      label: "Mode",
+                      value: draftFeature.deviceMode,
+                      placeholder: "Add mode",
+                      onSave: (value) => saveField({ deviceMode: value })
+                    }}
+                    readonlyProps={{ label: "Mode", value: draftFeature.deviceMode, placeholder: "Not set" }}
                   />
                 </>
               ) : null}
 
               {draftFeature.kind === "find" ? (
                 <>
-                  <EditableField
-                    label="Find Date"
-                    value={draftFeature.findDate}
-                    type="date"
-                    renderPreview={(value) => (
-                      <span className="text-[15px] font-semibold text-[#15313f]">
-                        {formatDateOnly(value)}
-                      </span>
-                    )}
-                    onSave={(value) => saveField({ findDate: value })}
+                  <FieldRenderer
+                    editable={canEdit}
+                    editableProps={{
+                      label: "Find Date",
+                      value: draftFeature.findDate,
+                      type: "date",
+                      onSave: (value) => saveField({ findDate: value }),
+                      renderPreview: (value) => (
+                        <span className="text-[15px] font-semibold text-[#15313f]">
+                          {formatDateOnly(value)}
+                        </span>
+                      )
+                    }}
                   />
-                  <EditableField
-                    label="Age"
-                    value={draftFeature.ageLabel}
-                    placeholder="Add age"
-                    onSave={(value) => saveField({ ageLabel: value })}
+                  <FieldRenderer
+                    editable={canEdit}
+                    editableProps={{
+                      label: "Age",
+                      value: draftFeature.ageLabel,
+                      placeholder: "Add age",
+                      onSave: (value) => saveField({ ageLabel: value })
+                    }}
+                    readonlyProps={{ label: "Age", value: draftFeature.ageLabel, placeholder: "Not set" }}
                   />
-                  <EditableField
-                    label="Type"
-                    value={draftFeature.type}
-                    type="select"
-                    options={[
-                      { label: "Coin", value: "coin" },
-                      { label: "Ring", value: "ring" },
-                      { label: "Jewelry", value: "jewelry" },
-                      { label: "Artifact", value: "artifact" },
-                      { label: "Other", value: "other" }
-                    ]}
-                    onSave={(value) => saveField({ type: value })}
-                  />
-                  <EditableField
-                    label="Metal"
-                    value={draftFeature.metal}
-                    type="select"
-                    options={[
-                      { label: "Copper", value: "C" },
-                      { label: "Silver", value: "S" },
-                      { label: "Gold", value: "G" }
-                    ]}
-                    onSave={(value) => saveField({ metal: value })}
-                  />
-                  <EditableField
-                    label="Count"
-                    value={draftFeature.itemCount}
-                    type="number"
-                    placeholder="Add count"
-                    onSave={(value) => saveField({ itemCount: value })}
+                  {canEdit ? (
+                    <>
+                      <EditableField
+                        label="Type"
+                        value={draftFeature.type}
+                        type="select"
+                        options={[
+                          { label: "Coin", value: "coin" },
+                          { label: "Ring", value: "ring" },
+                          { label: "Jewelry", value: "jewelry" },
+                          { label: "Artifact", value: "artifact" },
+                          { label: "Other", value: "other" }
+                        ]}
+                        onSave={(value) => saveField({ type: value })}
+                      />
+                      <EditableField
+                        label="Metal"
+                        value={draftFeature.metal}
+                        type="select"
+                        options={[
+                          { label: "Copper", value: "C" },
+                          { label: "Silver", value: "S" },
+                          { label: "Gold", value: "G" }
+                        ]}
+                        onSave={(value) => saveField({ metal: value })}
+                      />
+                    </>
+                  ) : (
+                    <>
+                      <ReadonlyField label="Type" value={draftFeature.type} placeholder="Not set" />
+                      <ReadonlyField label="Metal" value={draftFeature.metal} placeholder="Not set" />
+                    </>
+                  )}
+                  <FieldRenderer
+                    editable={canEdit}
+                    editableProps={{
+                      label: "Count",
+                      value: draftFeature.itemCount,
+                      type: "number",
+                      placeholder: "Add count",
+                      onSave: (value) => saveField({ itemCount: value })
+                    }}
+                    readonlyProps={{ label: "Count", value: draftFeature.itemCount, placeholder: "Not set" }}
                   />
                 </>
               ) : null}
 
               {draftFeature.kind === "prospect" ? (
                 <>
-                  <EditableField
-                    label="Age"
-                    value={draftFeature.ageLabel}
-                    placeholder="Add age"
-                    onSave={(value) => saveField({ ageLabel: value })}
+                  <FieldRenderer
+                    editable={canEdit}
+                    editableProps={{
+                      label: "Age",
+                      value: draftFeature.ageLabel,
+                      placeholder: "Add age",
+                      onSave: (value) => saveField({ ageLabel: value })
+                    }}
+                    readonlyProps={{ label: "Age", value: draftFeature.ageLabel, placeholder: "Not set" }}
                   />
-                  <EditableField
-                    label="Visited"
-                    value={draftFeature.dateVisited}
-                    type="date"
-                    placeholder="Add visit date"
-                    renderPreview={(value) => (
-                      <span className="text-[15px] font-semibold text-[#15313f]">
-                        {formatDateOnly(value)}
-                      </span>
-                    )}
-                    onSave={(value) => saveField({ dateVisited: value })}
+                  <FieldRenderer
+                    editable={canEdit}
+                    editableProps={{
+                      label: "Visited",
+                      value: draftFeature.dateVisited,
+                      type: "date",
+                      placeholder: "Add visit date",
+                      onSave: (value) => saveField({ dateVisited: value }),
+                      renderPreview: (value) => (
+                        <span className="text-[15px] font-semibold text-[#15313f]">
+                          {formatDateOnly(value)}
+                        </span>
+                      )
+                    }}
+                    readonlyProps={{
+                      label: "Visited",
+                      value: draftFeature.dateVisited,
+                      placeholder: "Not set",
+                      renderPreview: (value) => (
+                        <span className="text-[15px] font-semibold text-[#15313f]">
+                          {formatDateOnly(value)}
+                        </span>
+                      )
+                    }}
                   />
                 </>
               ) : null}
@@ -639,67 +764,71 @@ export default function FeatureDetailsModal({
                           className="aspect-square w-full object-cover"
                         />
                       </button>
-                      <button
-                        type="button"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          setPendingDeleteImageSrc(image.src);
-                        }}
-                        className="absolute right-2 top-2 inline-flex h-8 w-8 items-center justify-center rounded-full bg-[rgba(7,18,24,0.72)] text-white"
-                        aria-label="Delete image"
-                      >
-                        <Trash2 size={14} strokeWidth={2.2} />
-                      </button>
+                      {canEdit ? (
+                        <button
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            setPendingDeleteImageSrc(image.src);
+                          }}
+                          className="absolute right-2 top-2 inline-flex h-8 w-8 items-center justify-center rounded-full bg-[rgba(7,18,24,0.72)] text-white"
+                          aria-label="Delete image"
+                        >
+                          <Trash2 size={14} strokeWidth={2.2} />
+                        </button>
+                      ) : null}
                     </div>
                   ))}
                 </div>
               ) : null}
 
-              <div className="mt-2">
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  onDragOver={(event) => {
-                    event.preventDefault();
-                    setDragActive(true);
-                  }}
-                  onDragLeave={() => setDragActive(false)}
-                  onDrop={(event) => {
-                    void handleDrop(event);
-                  }}
-                  className={`mb-4 flex w-full flex-col items-center justify-center rounded-2xl border border-dashed px-4 py-6 text-center transition ${
-                    dragActive
-                      ? "border-[#15313f] bg-[rgba(21,49,63,0.08)]"
-                      : "border-[rgba(21,49,63,0.18)] bg-[rgba(247,250,252,0.9)]"
-                  }`}
-                >
-                  <ImageUp size={20} className="mb-2 text-[#15313f]" strokeWidth={2.1} />
-                  <span className="text-sm font-semibold text-[#15313f]">
-                    Drop image{imageSaving ? "s" : ""} here
-                  </span>
-                  <span className="mt-1 text-xs text-[#6a7d88]">
-                    or click to upload one or more images
-                  </span>
-                </button>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  multiple
-                  accept="image/*"
-                  className="hidden"
-                  onChange={(event) => {
-                    const files = Array.from(event.currentTarget.files ?? []);
-                    if (files.length > 0) {
-                      void uploadFiles(files);
-                    }
-                  }}
-                />
-                {imageSaving ? (
-                  <div className="text-xs font-bold uppercase tracking-[0.08em] text-[#6a7d88]">
-                    Uploading images...
-                  </div>
-                ) : null}
-              </div>
+              {canEdit ? (
+                <div className="mt-2">
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    onDragOver={(event) => {
+                      event.preventDefault();
+                      setDragActive(true);
+                    }}
+                    onDragLeave={() => setDragActive(false)}
+                    onDrop={(event) => {
+                      void handleDrop(event);
+                    }}
+                    className={`mb-4 flex w-full flex-col items-center justify-center rounded-2xl border border-dashed px-4 py-6 text-center transition ${
+                      dragActive
+                        ? "border-[#15313f] bg-[rgba(21,49,63,0.08)]"
+                        : "border-[rgba(21,49,63,0.18)] bg-[rgba(247,250,252,0.9)]"
+                    }`}
+                  >
+                    <ImageUp size={20} className="mb-2 text-[#15313f]" strokeWidth={2.1} />
+                    <span className="text-sm font-semibold text-[#15313f]">
+                      Drop image{imageSaving ? "s" : ""} here
+                    </span>
+                    <span className="mt-1 text-xs text-[#6a7d88]">
+                      or click to upload one or more images
+                    </span>
+                  </button>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    multiple
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(event) => {
+                      const files = Array.from(event.currentTarget.files ?? []);
+                      if (files.length > 0) {
+                        void uploadFiles(files);
+                      }
+                    }}
+                  />
+                  {imageSaving ? (
+                    <div className="text-xs font-bold uppercase tracking-[0.08em] text-[#6a7d88]">
+                      Uploading images...
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
 
               {error ? (
                 <div className="rounded-2xl border border-[rgba(161,39,39,0.18)] bg-[rgba(255,240,240,0.84)] px-4 py-3 text-[13px] text-[#8a2b2b]">
@@ -707,30 +836,32 @@ export default function FeatureDetailsModal({
                 </div>
               ) : null}
 
-              <div className="mt-2">
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onFeatureMove(draftFeature);
-                      onClose();
-                    }}
-                    className="inline-flex items-center gap-2 rounded-xl border border-[rgba(21,49,63,0.14)] bg-white px-4 py-2 text-[12px] font-bold uppercase tracking-[0.08em] text-[#15313f]"
-                  >
-                    <MapPinned size={14} strokeWidth={2.2} />
-                    <span>{draftFeature.kind === "event" ? "Edit Shape" : "Move"}</span>
-                  </button>
+              {canEdit ? (
+                <div className="mt-2">
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onFeatureMove(draftFeature);
+                        onClose();
+                      }}
+                      className="inline-flex items-center gap-2 rounded-xl border border-[rgba(21,49,63,0.14)] bg-white px-4 py-2 text-[12px] font-bold uppercase tracking-[0.08em] text-[#15313f]"
+                    >
+                      <MapPinned size={14} strokeWidth={2.2} />
+                      <span>{draftFeature.kind === "event" ? "Edit Shape" : "Move"}</span>
+                    </button>
 
-                  <button
-                    type="button"
-                    onClick={() => setPendingDeleteFeature(true)}
-                    className="inline-flex items-center gap-2 rounded-xl bg-[#8a2b2b] px-4 py-2 text-[12px] font-bold uppercase tracking-[0.08em] text-white"
-                  >
-                    <Trash2 size={14} strokeWidth={2.2} />
-                    <span>Delete {draftFeature.kind}</span>
-                  </button>
+                    <button
+                      type="button"
+                      onClick={() => setPendingDeleteFeature(true)}
+                      className="inline-flex items-center gap-2 rounded-xl bg-[#8a2b2b] px-4 py-2 text-[12px] font-bold uppercase tracking-[0.08em] text-white"
+                    >
+                      <Trash2 size={14} strokeWidth={2.2} />
+                      <span>Delete {draftFeature.kind}</span>
+                    </button>
+                  </div>
                 </div>
-              </div>
+              ) : null}
             </div>
           </div>
         </div>

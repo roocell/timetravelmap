@@ -1,5 +1,11 @@
 import { Prisma } from "@prisma/client";
 import { NextRequest, NextResponse } from "next/server";
+import {
+  AuthRequiredError,
+  ensureImageOwnedByUser,
+  FeatureOwnershipError,
+  requireStackUser
+} from "../../../../lib/feature-auth";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -47,6 +53,7 @@ export async function POST(request: NextRequest) {
   const { prisma } = await import("../../../../lib/prisma");
 
   try {
+    const user = await requireStackUser(request);
     const body = await request.json();
     const title = toNullableString(body?.title);
     const point = normalizePoint(body?.point);
@@ -64,6 +71,7 @@ export async function POST(request: NextRequest) {
       Prisma.sql`
         insert into timetravelmap.prospects (
           title,
+          owner_id,
           age_label,
           description,
           latitude,
@@ -72,6 +80,7 @@ export async function POST(request: NextRequest) {
         )
         values (
           ${title},
+          ${user.id},
           ${toNullableString(body?.ageLabel)},
           ${toNullableString(body?.description)},
           ${point.latitude},
@@ -101,15 +110,12 @@ export async function POST(request: NextRequest) {
         continue;
       }
 
-      const storedImage = await prisma.image.upsert({
-        where: { storagePath: src },
-        update: {
+      const storedImage = await ensureImageOwnedByUser(prisma, src, user.id);
+
+      await prisma.image.update({
+        where: { id: storedImage.id },
+        data: {
           altText: toNullableString(image?.altText)
-        },
-        create: {
-          storagePath: src,
-          altText: toNullableString(image?.altText),
-          sourceName: "manual-create"
         }
       });
 
@@ -150,6 +156,7 @@ export async function POST(request: NextRequest) {
       prospect: {
         id: prospect.id,
         kind: "prospect",
+        ownerId: user.id,
         title: prospect.title,
         ageLabel: prospect.age_label,
         description: prospect.description,
@@ -164,6 +171,14 @@ export async function POST(request: NextRequest) {
       }
     });
   } catch (error) {
+    if (error instanceof AuthRequiredError) {
+      return NextResponse.json({ error: error.message }, { status: 401 });
+    }
+
+    if (error instanceof FeatureOwnershipError) {
+      return NextResponse.json({ error: error.message }, { status: 403 });
+    }
+
     return NextResponse.json(
       {
         error: error instanceof Error ? error.message : "Failed to create prospect"

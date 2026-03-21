@@ -8,6 +8,7 @@ import json
 import mimetypes
 import re
 import sys
+import argparse
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Dict, List, Tuple
@@ -73,7 +74,93 @@ def download_image(url: str) -> Tuple[str, Dict[str, str]]:
     return url, {"file": f"/images/{filename}", "sha256": digest}
 
 
+def redownload_to_manifest_path(url: str, record: Dict[str, str]) -> Tuple[str, Dict[str, str]]:
+    request = Request(
+        url,
+        headers={
+            "User-Agent": "Mozilla/5.0",
+            "Accept": "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
+        },
+    )
+
+    relative_path = record.get("file", "").lstrip("/")
+    if not relative_path:
+        raise ValueError(f"Manifest entry for {url} is missing a file path")
+
+    output_path = ROOT / "public" / relative_path
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    with urlopen(request, timeout=60) as response:
+        output_path.write_bytes(response.read())
+
+    return url, record
+
+
+def load_manifest() -> Dict[str, Dict[str, str]]:
+    if not MANIFEST_PATH.exists():
+        return {}
+
+    payload = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
+    return payload.get("images", {})
+
+
+def repair_missing_files() -> int:
+    manifest = load_manifest()
+    if not manifest:
+        print("No manifest found, nothing to repair.")
+        return 0
+
+    missing = []
+    for url, record in manifest.items():
+        relative_path = record.get("file", "").lstrip("/")
+        if not relative_path:
+            continue
+
+        if not (ROOT / "public" / relative_path).exists():
+            missing.append((url, record))
+
+    if not missing:
+        print("No missing image files detected.")
+        return 0
+
+    print(f"Repairing {len(missing)} missing image files.")
+    failures: List[Tuple[str, str]] = []
+
+    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+        future_map = {
+            executor.submit(redownload_to_manifest_path, url, record): url
+            for url, record in missing
+        }
+
+        for index, future in enumerate(as_completed(future_map), start=1):
+            url = future_map[future]
+            try:
+                future.result()
+                if index % 25 == 0 or index == len(missing):
+                    print(f"Repaired {index}/{len(missing)}")
+            except (HTTPError, URLError, TimeoutError) as exc:
+                failures.append((url, str(exc)))
+                print(f"Failed: {url} -> {exc}", file=sys.stderr)
+            except Exception as exc:  # noqa: BLE001
+                failures.append((url, str(exc)))
+                print(f"Failed: {url} -> {exc}", file=sys.stderr)
+
+    if failures:
+        print(f"{len(failures)} repairs failed.", file=sys.stderr)
+        return 1
+
+    print("Missing image repair complete.")
+    return 0
+
+
 def main() -> int:
+    cli = argparse.ArgumentParser()
+    cli.add_argument("--repair-missing", action="store_true")
+    args = cli.parse_args()
+
+    if args.repair_missing:
+        return repair_missing_files()
+
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
     urls = extract_urls()

@@ -1,5 +1,11 @@
 import { Prisma } from "@prisma/client";
 import { NextRequest, NextResponse } from "next/server";
+import {
+  AuthRequiredError,
+  ensureImageOwnedByUser,
+  FeatureOwnershipError,
+  requireStackUser
+} from "../../../../lib/feature-auth";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -42,6 +48,78 @@ function toNullableNumber(value: unknown) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+function getConstraintErrorMessage(error: unknown) {
+  if (!(error instanceof Error)) {
+    return null;
+  }
+
+  const match = error.message.match(/unique constraint "([^"]+)"/i);
+  if (!match) {
+    return null;
+  }
+
+  if (match[1] === "events_source_unique") {
+    const detailMatch = error.message.match(/Key \(([^)]+)\)=\(([^)]+)\)/i);
+    if (detailMatch) {
+      const columns = detailMatch[1].split(",").map((value) => value.trim());
+      const values = detailMatch[2].split(",").map((value) => value.trim());
+      const parts = columns.map((column, index) => `${column}=${values[index] ?? ""}`);
+      return `Duplicate imported event: ${parts.join(", ")}`;
+    }
+  }
+
+  return `Unique constraint hit: ${match[1]}`;
+}
+
+function getConstraintDebug(
+  error: unknown,
+  attempted?: { source_file: string | null; source_placemark_id: string | null }
+) {
+  if (!(error instanceof Error)) {
+    if (!attempted) {
+      return null;
+    }
+
+    return {
+      source_file: attempted.source_file ?? "NULL",
+      source_placemark_id: attempted.source_placemark_id ?? "NULL"
+    };
+  }
+
+  const constraintMatch = error.message.match(/unique constraint "([^"]+)"/i);
+  const detailMatch = error.message.match(/Key \(([^)]+)\)=\(([^)]+)\)/i);
+  if (!constraintMatch && !detailMatch) {
+    return null;
+  }
+
+  const debug: Record<string, string> = {};
+
+  if (constraintMatch) {
+    debug.constraint = constraintMatch[1];
+  }
+
+  if (detailMatch) {
+    const columns = detailMatch[1].split(",").map((value) => value.trim());
+    const values = detailMatch[2].split(",").map((value) => value.trim());
+
+    for (let index = 0; index < columns.length; index += 1) {
+      debug[columns[index]] = values[index] ?? "";
+    }
+  }
+
+  if (attempted) {
+    if (!("source_file" in debug)) {
+      debug.source_file = attempted.source_file ?? "NULL";
+    }
+
+    if (!("source_placemark_id" in debug)) {
+      debug.source_placemark_id = attempted.source_placemark_id ?? "NULL";
+    }
+  }
+
+  return debug;
+}
+
 function normalizePolygon(points: unknown) {
   if (!Array.isArray(points) || points.length < 3) {
     return null;
@@ -79,9 +157,14 @@ function normalizePolygon(points: unknown) {
 
 export async function POST(request: NextRequest) {
   const { prisma } = await import("../../../../lib/prisma");
+  let attemptedSourceFile: string | null = null;
+  let attemptedSourcePlacemarkId: string | null = null;
 
   try {
+    const user = await requireStackUser(request);
     const body = await request.json();
+    attemptedSourceFile = toNullableString(body?.sourceFile);
+    attemptedSourcePlacemarkId = toNullableString(body?.sourcePlacemarkId);
     const title = toNullableString(body?.title);
     const eventDate = toNullableString(body?.date ?? body?.eventDate);
     const geometry = normalizePolygon(body?.points);
@@ -108,6 +191,7 @@ export async function POST(request: NextRequest) {
         with inserted as (
           insert into timetravelmap.events (
             title,
+            owner_id,
             event_date,
             duration_minutes,
             device_used,
@@ -120,6 +204,7 @@ export async function POST(request: NextRequest) {
           )
           values (
             ${title},
+            ${user.id},
             ${eventDate}::date,
             ${toNullableNumber(body?.durationMinutes)},
             ${toNullableString(body?.deviceUsed)},
@@ -170,15 +255,12 @@ export async function POST(request: NextRequest) {
         continue;
       }
 
-      const storedImage = await prisma.image.upsert({
-        where: { storagePath: src },
-        update: {
+      const storedImage = await ensureImageOwnedByUser(prisma, src, user.id);
+
+      await prisma.image.update({
+        where: { id: storedImage.id },
+        data: {
           altText: toNullableString(image?.altText)
-        },
-        create: {
-          storagePath: src,
-          altText: toNullableString(image?.altText),
-          sourceName: "manual-create"
         }
       });
 
@@ -219,6 +301,7 @@ export async function POST(request: NextRequest) {
       event: {
         id: event.id,
         kind: "event",
+        ownerId: user.id,
         title: event.title,
         eventDate: String(event.event_date).slice(0, 10),
         durationMinutes: event.duration_minutes,
@@ -238,6 +321,28 @@ export async function POST(request: NextRequest) {
       }
     });
   } catch (error) {
+    if (error instanceof AuthRequiredError) {
+      return NextResponse.json({ error: error.message }, { status: 401 });
+    }
+
+    if (error instanceof FeatureOwnershipError) {
+      return NextResponse.json({ error: error.message }, { status: 403 });
+    }
+
+    const constraintError = getConstraintErrorMessage(error);
+    if (constraintError) {
+      return NextResponse.json(
+        {
+          error: constraintError,
+          debug: getConstraintDebug(error, {
+            source_file: attemptedSourceFile,
+            source_placemark_id: attemptedSourcePlacemarkId
+          })
+        },
+        { status: 409 }
+      );
+    }
+
     return NextResponse.json(
       {
         error: error instanceof Error ? error.message : "Failed to create event"

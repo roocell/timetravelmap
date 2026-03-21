@@ -1,5 +1,11 @@
 import { FindType, MetalCode, Prisma } from "@prisma/client";
 import { NextRequest, NextResponse } from "next/server";
+import {
+  AuthRequiredError,
+  ensureImageOwnedByUser,
+  FeatureOwnershipError,
+  requireStackUser
+} from "../../../../lib/feature-auth";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -71,6 +77,7 @@ export async function POST(request: NextRequest) {
   const { prisma } = await import("../../../../lib/prisma");
 
   try {
+    const user = await requireStackUser(request);
     const body = await request.json();
     const title = toNullableString(body?.title);
     const findDate = toNullableString(body?.date);
@@ -94,6 +101,7 @@ export async function POST(request: NextRequest) {
       Prisma.sql`
         insert into timetravelmap.finds (
           title,
+          owner_id,
           find_date,
           age_label,
           type,
@@ -105,6 +113,7 @@ export async function POST(request: NextRequest) {
         )
         values (
           ${title},
+          ${user.id},
           ${findDate}::date,
           ${toNullableString(body?.ageLabel)},
           CAST(${toFindType(body?.type)} AS timetravelmap.find_type),
@@ -140,15 +149,12 @@ export async function POST(request: NextRequest) {
         continue;
       }
 
-      const storedImage = await prisma.image.upsert({
-        where: { storagePath: src },
-        update: {
+      const storedImage = await ensureImageOwnedByUser(prisma, src, user.id);
+
+      await prisma.image.update({
+        where: { id: storedImage.id },
+        data: {
           altText: toNullableString(image?.altText)
-        },
-        create: {
-          storagePath: src,
-          altText: toNullableString(image?.altText),
-          sourceName: "manual-create"
         }
       });
 
@@ -189,6 +195,7 @@ export async function POST(request: NextRequest) {
       find: {
         id: find.id,
         kind: "find",
+        ownerId: user.id,
         title: find.title,
         findDate: String(find.find_date).slice(0, 10),
         ageLabel: find.age_label,
@@ -206,6 +213,14 @@ export async function POST(request: NextRequest) {
       }
     });
   } catch (error) {
+    if (error instanceof AuthRequiredError) {
+      return NextResponse.json({ error: error.message }, { status: 401 });
+    }
+
+    if (error instanceof FeatureOwnershipError) {
+      return NextResponse.json({ error: error.message }, { status: 403 });
+    }
+
     return NextResponse.json(
       {
         error: error instanceof Error ? error.message : "Failed to create find"

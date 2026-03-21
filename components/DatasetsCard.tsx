@@ -26,6 +26,14 @@ type DatasetsCardProps = {
     date: string | null;
   }>;
   loading?: boolean;
+  debug?: {
+    clientUserId: string | null;
+    responseStatus: number | null;
+    responseOk: boolean | null;
+    error: string | null;
+    yearsCount: number;
+    prospectsCount: number;
+  } | null;
   activeYears: number[];
   prospectsActive: boolean;
   onToggleYear: (year: number) => void;
@@ -39,6 +47,7 @@ export default function DatasetsCard({
   prospectCount,
   prospectEntries,
   loading = false,
+  debug = null,
   activeYears,
   prospectsActive,
   onToggleYear,
@@ -50,6 +59,7 @@ export default function DatasetsCard({
   const [prospectsExpanded, setProspectsExpanded] = useState(false);
   const yearRowRefs = useRef<Record<number, HTMLDivElement | null>>({});
   const prospectsRowRef = useRef<HTMLDivElement | null>(null);
+  const showProspects = prospectCount > 0 || prospectEntries.length > 0;
   const activeButtonClass =
     "border-[rgba(11,34,45,0.92)] bg-gradient-to-b from-[#173745] to-[#0f2731] text-[#f3f8fa] shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_16px_32px_rgba(11,34,45,0.28)]";
 
@@ -97,12 +107,21 @@ export default function DatasetsCard({
           <Database size={16} strokeWidth={1.9} />
           <span>Data Sets</span>
         </div>
-        <p className="m-0 text-[13px] text-[#5e727d]">
-          {loading ? "Loading imported records..." : "Imported event, find, and prospect layers"}
-        </p>
+        <p className="m-0 text-[13px] text-[#5e727d]">Event, Finds, Prospects Layers</p>
       </div>
 
       <div className="grid gap-3 p-[18px]">
+        {debug?.error ? (
+          <div className="rounded-2xl border border-[rgba(180,60,20,0.16)] bg-[rgba(255,248,244,0.92)] px-4 py-3 font-mono text-[12px] text-[#7a3e21]">
+            <div>clientUserId: {debug.clientUserId ?? "null"}</div>
+            <div>responseStatus: {debug.responseStatus ?? "null"}</div>
+            <div>responseOk: {debug.responseOk === null ? "null" : String(debug.responseOk)}</div>
+            <div>yearsCount: {debug.yearsCount}</div>
+            <div>prospectsCount: {debug.prospectsCount}</div>
+            <div>error: {debug.error}</div>
+          </div>
+        ) : null}
+
         {years.map((yearEntry) => {
           const isExpanded = expandedYears.includes(yearEntry.year);
           const isActive = activeYears.includes(yearEntry.year);
@@ -175,44 +194,44 @@ export default function DatasetsCard({
           );
         })}
 
-        <div
-          ref={prospectsRowRef}
-          className="overflow-hidden rounded-2xl border border-[rgba(21,49,63,0.08)] bg-white/70"
-        >
-          <div className="flex items-stretch">
-            <Button
-              type="button"
-              className={`flex-1 justify-between rounded-none border-0 px-[18px] py-4 max-[700px]:flex-col max-[700px]:items-start max-[700px]:gap-[6px] ${
-                prospectsActive ? activeButtonClass : ""
-              }`}
-              onClick={onToggleProspects}
-            >
-              <span className="inline-flex items-center gap-[10px]">
-                <MapPinned size={16} strokeWidth={1.9} />
-                <span>Prospects</span>
-              </span>
-              <span className="text-[13px] font-semibold text-[#60737e]">
-                {prospectCount} records
-              </span>
-            </Button>
+        {showProspects ? (
+          <div
+            ref={prospectsRowRef}
+            className="overflow-hidden rounded-2xl border border-[rgba(21,49,63,0.08)] bg-white/70"
+          >
+            <div className="flex items-stretch">
+              <Button
+                type="button"
+                className={`flex-1 justify-between rounded-none border-0 px-[18px] py-4 max-[700px]:flex-col max-[700px]:items-start max-[700px]:gap-[6px] ${
+                  prospectsActive ? activeButtonClass : ""
+                }`}
+                onClick={onToggleProspects}
+              >
+                <span className="inline-flex items-center gap-[10px]">
+                  <MapPinned size={16} strokeWidth={1.9} />
+                  <span>Prospects</span>
+                </span>
+                <span className="text-[13px] font-semibold text-[#60737e]">
+                  {prospectCount} records
+                </span>
+              </Button>
 
-            <button
-              type="button"
-              onClick={toggleProspectsExpanded}
-              className="inline-flex w-14 shrink-0 items-center justify-center border-l border-[rgba(21,49,63,0.08)] bg-[rgba(244,248,250,0.95)] text-[#526773] transition hover:bg-[rgba(235,242,246,0.98)]"
-              aria-label={`${prospectsExpanded ? "Hide" : "Show"} prospect entries`}
-            >
-              {prospectsExpanded ? (
-                <ChevronUp size={18} strokeWidth={2.2} />
-              ) : (
-                <ChevronDown size={18} strokeWidth={2.2} />
-              )}
-            </button>
-          </div>
+              <button
+                type="button"
+                onClick={toggleProspectsExpanded}
+                className="inline-flex w-14 shrink-0 items-center justify-center border-l border-[rgba(21,49,63,0.08)] bg-[rgba(244,248,250,0.95)] text-[#526773] transition hover:bg-[rgba(235,242,246,0.98)]"
+                aria-label={`${prospectsExpanded ? "Hide" : "Show"} prospect entries`}
+              >
+                {prospectsExpanded ? (
+                  <ChevronUp size={18} strokeWidth={2.2} />
+                ) : (
+                  <ChevronDown size={18} strokeWidth={2.2} />
+                )}
+              </button>
+            </div>
 
-          {prospectsExpanded ? (
-            <div className="border-t border-[rgba(21,49,63,0.08)] bg-[rgba(247,250,252,0.96)] px-4 py-3">
-              {prospectEntries.length > 0 ? (
+            {prospectsExpanded ? (
+              <div className="border-t border-[rgba(21,49,63,0.08)] bg-[rgba(247,250,252,0.96)] px-4 py-3">
                 <div className="grid gap-2">
                   {prospectEntries.map((entry) => (
                     <button
@@ -235,14 +254,10 @@ export default function DatasetsCard({
                     </button>
                   ))}
                 </div>
-              ) : (
-                <div className="rounded-xl border border-[rgba(21,49,63,0.06)] bg-white/80 px-3 py-3 text-[13px] text-[#60737e]">
-                  No prospects loaded.
-                </div>
-              )}
-            </div>
-          ) : null}
-        </div>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
       </div>
     </Card>
   );

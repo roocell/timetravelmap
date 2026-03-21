@@ -2,6 +2,13 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { FindType, MetalCode, Prisma } from "@prisma/client";
 import { NextRequest, NextResponse } from "next/server";
+import {
+  AuthRequiredError,
+  ensureFeatureOwner,
+  ensureImageOwnedByUser,
+  FeatureOwnershipError,
+  requireStackUser
+} from "../../../../../lib/feature-auth";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -139,12 +146,14 @@ async function readFeature(prisma: Awaited<typeof import("../../../../../lib/pri
     return {
       id: event.id,
       kind,
+      ownerId: event.ownerId,
       title: event.title,
       description: event.description,
       eventDate: event.eventDate.toISOString().slice(0, 10),
       durationMinutes: event.durationMinutes,
       deviceUsed: event.deviceUsed,
       deviceMode: event.deviceMode,
+      geometry: null,
       images: serializeImages(event.eventImages)
     };
   }
@@ -174,6 +183,7 @@ async function readFeature(prisma: Awaited<typeof import("../../../../../lib/pri
     return {
       id: find.id,
       kind,
+      ownerId: find.ownerId,
       title: find.title,
       description: find.description,
       findDate: find.findDate.toISOString().slice(0, 10),
@@ -181,6 +191,8 @@ async function readFeature(prisma: Awaited<typeof import("../../../../../lib/pri
       type: find.type,
       metal: find.metal,
       itemCount: find.itemCount,
+      latitude: find.latitude,
+      longitude: find.longitude,
       images: serializeImages(find.findImages)
     };
   }
@@ -209,10 +221,13 @@ async function readFeature(prisma: Awaited<typeof import("../../../../../lib/pri
   return {
     id: prospect.id,
     kind,
+    ownerId: prospect.ownerId,
     title: prospect.title,
     description: prospect.description,
     ageLabel: prospect.ageLabel,
     dateVisited: prospect.dateVisited?.toISOString().slice(0, 10) ?? null,
+    latitude: prospect.latitude,
+    longitude: prospect.longitude,
     images: serializeImages(prospect.prospectImages)
   };
 }
@@ -228,15 +243,17 @@ async function addImage(
     throw new Error("Image path is required");
   }
 
-  const image = await prisma.image.upsert({
-    where: { storagePath: src },
-    update: {
+  const featureOwnerId = await getFeatureOwnerIdForAttach(prisma, kind, id);
+  if (!featureOwnerId) {
+    throw new FeatureOwnershipError("You can only attach images to features you own");
+  }
+
+  const image = await ensureImageOwnedByUser(prisma, src, featureOwnerId);
+
+  await prisma.image.update({
+    where: { id: image.id },
+    data: {
       altText: toNullableString(payload.altText)
-    },
-    create: {
-      storagePath: src,
-      altText: toNullableString(payload.altText),
-      sourceName: "manual-edit"
     }
   });
 
@@ -314,6 +331,22 @@ async function addImage(
       caption: toNullableString(payload.caption)
     }
   });
+}
+
+async function getFeatureOwnerIdForAttach(
+  prisma: Awaited<typeof import("../../../../../lib/prisma")>["prisma"],
+  kind: FeatureKind,
+  id: string
+) {
+  if (kind === "event") {
+    return (await prisma.event.findUnique({ where: { id }, select: { ownerId: true } }))?.ownerId ?? null;
+  }
+
+  if (kind === "find") {
+    return (await prisma.find.findUnique({ where: { id }, select: { ownerId: true } }))?.ownerId ?? null;
+  }
+
+  return (await prisma.prospect.findUnique({ where: { id }, select: { ownerId: true } }))?.ownerId ?? null;
 }
 
 async function removeImage(
@@ -406,6 +439,9 @@ export async function PATCH(
   const body = await request.json();
 
   try {
+    const user = await requireStackUser(request);
+    await ensureFeatureOwner(prisma, rawKind, id, user.id);
+
     if (rawKind === "event") {
       const data: Record<string, unknown> = {};
 
@@ -503,6 +539,14 @@ export async function PATCH(
 
     return NextResponse.json({ feature });
   } catch (error) {
+    if (error instanceof AuthRequiredError) {
+      return NextResponse.json({ error: error.message }, { status: 401 });
+    }
+
+    if (error instanceof FeatureOwnershipError) {
+      return NextResponse.json({ error: error.message }, { status: 403 });
+    }
+
     const message = error instanceof Error ? error.message : "Failed to update feature";
     return NextResponse.json({ error: message }, { status: 400 });
   }
@@ -559,6 +603,9 @@ export async function DELETE(
   }
 
   try {
+    const user = await requireStackUser(_request);
+    await ensureFeatureOwner(prisma, rawKind, id, user.id);
+
     const images =
       rawKind === "event"
         ? await prisma.eventImage.findMany({
@@ -595,6 +642,14 @@ export async function DELETE(
 
     return NextResponse.json({ ok: true });
   } catch (error) {
+    if (error instanceof AuthRequiredError) {
+      return NextResponse.json({ error: error.message }, { status: 401 });
+    }
+
+    if (error instanceof FeatureOwnershipError) {
+      return NextResponse.json({ error: error.message }, { status: 403 });
+    }
+
     const message = error instanceof Error ? error.message : "Failed to delete feature";
     return NextResponse.json({ error: message }, { status: 400 });
   }

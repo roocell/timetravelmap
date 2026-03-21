@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
+import { getStackUser } from "../../../../stack";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -14,6 +15,7 @@ type ImageRow = {
 
 type EventRow = {
   id: string;
+  owner_id: string | null;
   title: string;
   event_date: Date | string;
   duration_minutes: number | null;
@@ -28,6 +30,7 @@ type EventRow = {
 
 type FindRow = {
   id: string;
+  owner_id: string | null;
   title: string;
   find_date: Date | string;
   description: string | null;
@@ -41,6 +44,7 @@ type FindRow = {
 
 type ProspectRow = {
   id: string;
+  owner_id: string | null;
   title: string;
   description: string | null;
   age_label: string | null;
@@ -70,6 +74,11 @@ function buildImageMap(rows: ImageRow[]) {
 }
 
 export async function GET(request: NextRequest) {
+  const user = await getStackUser(request);
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const { prisma } = await import("../../../../lib/prisma");
   const yearParam = request.nextUrl.searchParams.get("year");
   const dataset = request.nextUrl.searchParams.get("dataset");
@@ -78,6 +87,7 @@ export async function GET(request: NextRequest) {
     const prospects = await prisma.$queryRaw<ProspectRow[]>`
       select
         id,
+        owner_id,
         title,
         description,
         age_label,
@@ -85,6 +95,7 @@ export async function GET(request: NextRequest) {
         latitude,
         longitude
       from timetravelmap.prospects
+      where owner_id = ${user.id}
       order by title asc
     `;
 
@@ -111,6 +122,7 @@ export async function GET(request: NextRequest) {
       type: "prospects",
       prospects: prospects.map((prospect) => ({
         id: prospect.id,
+        ownerId: prospect.owner_id,
         title: prospect.title,
         description: prospect.description,
         ageLabel: prospect.age_label,
@@ -131,6 +143,7 @@ export async function GET(request: NextRequest) {
     prisma.$queryRaw<EventRow[]>`
       select
         id,
+        owner_id,
         title,
         event_date,
         duration_minutes,
@@ -143,11 +156,13 @@ export async function GET(request: NextRequest) {
         ST_AsGeoJSON(area) as geojson
       from timetravelmap.events
       where extract(year from event_date)::int = ${year}
+        and owner_id = ${user.id}
       order by event_date asc, title asc
     `,
     prisma.$queryRaw<FindRow[]>`
       select
         id,
+        owner_id,
         title,
         find_date,
         description,
@@ -159,6 +174,7 @@ export async function GET(request: NextRequest) {
         longitude
       from timetravelmap.finds
       where extract(year from find_date)::int = ${year}
+        and owner_id = ${user.id}
       order by find_date asc, title asc
     `
   ]);
@@ -209,6 +225,7 @@ export async function GET(request: NextRequest) {
     year,
     events: events.map((event) => ({
       id: event.id,
+      ownerId: event.owner_id,
       title: event.title,
       eventDate: event.event_date,
       durationMinutes: event.duration_minutes,
@@ -224,6 +241,7 @@ export async function GET(request: NextRequest) {
     })),
     finds: finds.map((find) => ({
       id: find.id,
+      ownerId: find.owner_id,
       title: find.title,
       findDate: find.find_date,
       description: find.description,

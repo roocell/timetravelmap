@@ -5,6 +5,16 @@
 }
 
 @layer base {
+  :root {
+    --popover: 0 0% 100%;
+    --popover-foreground: 215 28% 17%;
+    --muted: 210 40% 96.1%;
+    --accent: 210 40% 96.1%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+    --border: 214.3 31.8% 91.4%;
+  }
+
   html,
   body {
     height: 100%;
@@ -16,5 +26,25 @@
 
   a {
     color: inherit;
+  }
+}
+
+@layer components {
+  [data-radix-popper-content-wrapper] {
+    z-index: 10000 !important;
+    pointer-events: auto !important;
+  }
+
+  .stack-scope[role="menu"] {
+    background-color: rgba(255, 255, 255, 0.98) !important;
+    border-color: rgba(148, 163, 184, 0.3) !important;
+    opacity: 1 !important;
+    box-shadow: 0 24px 60px rgba(15, 23, 42, 0.18) !important;
+    pointer-events: auto !important;
+  }
+
+  .stack-scope[role="menu"],
+  .stack-scope[role="menu"] * {
+    cursor: pointer !important;
   }
 }

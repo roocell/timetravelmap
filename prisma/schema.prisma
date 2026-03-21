@@ -29,6 +29,7 @@ enum MetalCode {
 
 model Image {
   id             String      @id @default(uuid()) @db.Uuid
+  ownerId        String?     @map("owner_id")
   storagePath    String      @unique @map("storage_path")
   originalUrl    String?     @map("original_url")
   mimeType       String?     @map("mime_type")
@@ -45,10 +46,12 @@ model Image {
 
   @@map("images")
   @@schema("timetravelmap")
+  @@index([ownerId], map: "images_owner_id_idx")
 }
 
 model Event {
   id               String                @id @default(uuid()) @db.Uuid
+  ownerId          String?               @map("owner_id")
   title            String
   eventDate        DateTime              @map("event_date") @db.Date
   durationMinutes  Int?                  @map("duration_minutes")
@@ -66,7 +69,7 @@ model Event {
   eventImages      EventImage[]
   finds            Find[]
 
-  @@unique([sourceFile, sourcePlacemarkId], map: "events_source_unique")
+  @@index([ownerId], map: "events_owner_id_idx")
   @@map("events")
   @@schema("timetravelmap")
 }
@@ -87,6 +90,7 @@ model EventImage {
 
 model Find {
   id               String                @id @default(uuid()) @db.Uuid
+  ownerId          String?               @map("owner_id")
   eventId          String?               @map("event_id") @db.Uuid
   title            String
   findDate         DateTime              @map("find_date") @db.Date
@@ -106,8 +110,8 @@ model Find {
   event            Event?                @relation(fields: [eventId], references: [id], onDelete: SetNull)
   findImages       FindImage[]
 
-  @@unique([sourceFile, sourcePlacemarkId], map: "finds_source_unique")
   @@index([eventId], map: "finds_event_id_idx")
+  @@index([ownerId], map: "finds_owner_id_idx")
   @@index([findDate(sort: Desc)], map: "finds_find_date_idx")
   @@index([latitude], map: "finds_latitude_idx")
   @@index([longitude], map: "finds_longitude_idx")
@@ -119,6 +123,7 @@ model Find {
 
 model Prospect {
   id          String   @id @default(uuid()) @db.Uuid
+  ownerId     String?  @map("owner_id")
   title       String
   ageLabel    String?  @map("age_label")
   ageStartYear Int?    @map("age_start_year")
@@ -127,10 +132,13 @@ model Prospect {
   latitude    Float
   longitude   Float
   dateVisited DateTime? @map("date_visited") @db.Date
+  sourceFile  String?  @map("source_file")
+  sourcePlacemarkId String? @map("source_placemark_id")
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
   prospectImages ProspectImage[]
 
+  @@index([ownerId], map: "prospects_owner_id_idx")
   @@index([dateVisited(sort: Desc)], map: "prospects_date_visited_idx")
   @@index([latitude], map: "prospects_latitude_idx")
   @@index([longitude], map: "prospects_longitude_idx")

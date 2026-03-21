@@ -8,6 +8,7 @@ import {
   Eye,
   EyeOff,
   Layers3,
+  LogIn,
   Map as MapIcon,
   MapPinned,
   PencilRuler,
@@ -15,6 +16,8 @@ import {
   Undo2,
   X
 } from "lucide-react";
+import { UserButton, useStackApp, useUser } from "@stackframe/stack";
+import { BrandIcons } from "@stackframe/stack-ui";
 import CreateFeatureModal from "./CreateFeatureModal";
 import DatasetsCard from "./DatasetsCard";
 import FeatureDetailsModal from "./FeatureDetailsModal";
@@ -128,6 +131,30 @@ function getFindShortLabel(find) {
   }
 
   return null;
+}
+
+function buildApiErrorMessage(body, fallback) {
+  const base = body?.error ?? fallback;
+  if (!body?.debug || typeof body.debug !== "object") {
+    return base;
+  }
+
+  const debugEntries = Object.entries(body.debug)
+    .filter(([, value]) => value != null && String(value).trim() !== "")
+    .map(([key, value]) => `${key}=${value}`);
+
+  return debugEntries.length > 0 ? `${base} (${debugEntries.join(", ")})` : base;
+}
+
+function getYearFromDateLike(value) {
+  const text = String(value ?? "").trim();
+  const match = text.match(/^(\d{4})/);
+  if (!match) {
+    return null;
+  }
+
+  const year = Number.parseInt(match[1], 10);
+  return Number.isFinite(year) ? year : null;
 }
 
 function createFindMarker(find) {
@@ -267,6 +294,7 @@ function createEventFeatureLayer(event, openFeature) {
       openFeature({
         id: event.id,
         kind: "event",
+        ownerId: event.ownerId,
         title: event.title,
         eventDate: event.eventDate,
         durationMinutes: event.durationMinutes,
@@ -290,6 +318,7 @@ function createFindFeatureLayer(find, openFeature) {
     openFeature({
       id: find.id,
       kind: "find",
+      ownerId: find.ownerId,
       title: find.title,
       findDate: find.findDate,
       ageLabel: find.ageLabel,
@@ -354,12 +383,16 @@ function loadSavedMapView() {
 
 export default function TimeTravelMap({
   datasets,
+  datasetDebug = null,
   activeYears = [],
   prospectsActive = false,
   onDatasetsChanged = () => {},
   onToggleYear = () => {},
   onToggleProspects = () => {}
 }) {
+  const user = useUser();
+  const stackApp = useStackApp();
+  const currentUserId = user?.id ?? null;
   const mapElementRef = useRef(null);
   const layerRefs = useRef([]);
   const datasetLayerRefs = useRef(new Map());
@@ -383,6 +416,9 @@ export default function TimeTravelMap({
   const [creationMode, setCreationMode] = useState(null);
   const [draftPoints, setDraftPoints] = useState([]);
   const [showCreateFeatureModal, setShowCreateFeatureModal] = useState(false);
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [authPending, setAuthPending] = useState(false);
+  const [authError, setAuthError] = useState("");
   const [editingFeature, setEditingFeature] = useState(null);
   const previousEditingDatasetKeyRef = useRef(null);
 
@@ -395,8 +431,28 @@ export default function TimeTravelMap({
   }, [creationMode]);
 
   useEffect(() => {
-    modalOpenRef.current = Boolean(selectedFeature || showCreateFeatureModal);
-  }, [selectedFeature, showCreateFeatureModal]);
+    modalOpenRef.current = Boolean(selectedFeature || showCreateFeatureModal || showAuthModal);
+  }, [selectedFeature, showCreateFeatureModal, showAuthModal]);
+
+  useEffect(() => {
+    if (currentUserId) {
+      setShowAuthModal(false);
+      setAuthPending(false);
+      setAuthError("");
+    }
+  }, [currentUserId]);
+
+  const beginGoogleSignIn = async () => {
+    setAuthPending(true);
+    setAuthError("");
+
+    try {
+      await stackApp.signInWithOAuth("google");
+    } catch (error) {
+      setAuthPending(false);
+      setAuthError(error instanceof Error ? error.message : "Unable to start Google sign in.");
+    }
+  };
 
   const openFeature = (feature) => {
     const overrideKey = `${feature.kind}:${feature.id}`;
@@ -516,7 +572,9 @@ export default function TimeTravelMap({
       return yearFeaturesCacheRef.current.get(year);
     }
 
-    const response = await fetch(`/api/datasets/features?year=${year}`);
+    const response = await fetch(`/api/datasets/features?year=${year}`, {
+      cache: "no-store"
+    });
     if (!response.ok) {
       return null;
     }
@@ -531,7 +589,9 @@ export default function TimeTravelMap({
       return yearFeaturesCacheRef.current.get("prospects");
     }
 
-    const response = await fetch("/api/datasets/features?dataset=prospects");
+    const response = await fetch("/api/datasets/features?dataset=prospects", {
+      cache: "no-store"
+    });
     if (!response.ok) {
       return null;
     }
@@ -576,6 +636,7 @@ export default function TimeTravelMap({
       openFeature({
         id: event.id,
         kind: "event",
+        ownerId: event.ownerId,
         title: event.title,
         eventDate: event.eventDate,
         durationMinutes: event.durationMinutes,
@@ -599,6 +660,7 @@ export default function TimeTravelMap({
     openFeature({
       id: find.id,
       kind: "find",
+      ownerId: find.ownerId,
       title: find.title,
       findDate: find.findDate,
       ageLabel: find.ageLabel,
@@ -640,6 +702,7 @@ export default function TimeTravelMap({
     openFeature({
       id: prospect.id,
       kind: "prospect",
+      ownerId: prospect.ownerId,
       title: prospect.title,
       ageLabel: prospect.ageLabel,
       dateVisited: prospect.dateVisited,
@@ -1065,10 +1128,120 @@ export default function TimeTravelMap({
     }
   };
 
+  const buildYearLayerGroup = (payload) => {
+    const layerGroup = L.layerGroup();
+
+    for (const event of (payload?.events ?? []).filter(
+      (feature) => !(editingFeature?.kind === "event" && editingFeature.id === feature.id)
+    )) {
+      createEventFeatureLayer(event, openFeature).addTo(layerGroup);
+    }
+
+    for (const find of (payload?.finds ?? []).filter(
+      (feature) => !(editingFeature?.kind === "find" && editingFeature.id === feature.id)
+    )) {
+      createFindFeatureLayer(find, openFeature).addTo(layerGroup);
+    }
+
+    return layerGroup;
+  };
+
+  const buildProspectLayerGroup = (payload) => {
+    const layerGroup = L.layerGroup();
+
+    for (const prospect of (payload?.prospects ?? []).filter(
+      (feature) => !(editingFeature?.kind === "prospect" && editingFeature.id === feature.id)
+    )) {
+      const marker = L.circleMarker([prospect.latitude, prospect.longitude], {
+        radius: 8,
+        color: "#9a7a07",
+        fillColor: "#f0c419",
+        fillOpacity: 0.92,
+        weight: 2
+      });
+
+      marker.bindTooltip(
+        [
+          `<strong>${prospect.title}</strong>`,
+          `${prospect.latitude}, ${prospect.longitude}`,
+          `<a href="https://www.google.com/maps/place/${prospect.latitude},${prospect.longitude}" target="_blank" rel="noreferrer">Google Maps Link</a>`
+        ].join("<br>"),
+        {
+          direction: "top",
+          offset: [0, -8],
+          opacity: 0.95,
+          interactive: true
+        }
+      );
+
+      marker.on("click", (clickEvent) => {
+        L.DomEvent.stopPropagation(clickEvent);
+        openFeature({
+          id: prospect.id,
+          kind: "prospect",
+          ownerId: prospect.ownerId,
+          title: prospect.title,
+          ageLabel: prospect.ageLabel,
+          dateVisited: prospect.dateVisited,
+          latitude: prospect.latitude,
+          longitude: prospect.longitude,
+          description: prospect.description,
+          images: prospect.images ?? []
+        });
+      });
+
+      marker.addTo(layerGroup);
+    }
+
+    return layerGroup;
+  };
+
+  const reloadYearLayer = async (year) => {
+    const map = mapRef.current;
+    if (!map) {
+      return null;
+    }
+
+    invalidateYear(year);
+    const payload = await fetchYearFeatures(year);
+    if (!payload || mapRef.current !== map || !map.getContainer()) {
+      return payload;
+    }
+
+    const layerGroup = buildYearLayerGroup(payload);
+    layerGroup.addTo(map);
+    datasetLayerRefs.current.set(`year:${year}`, layerGroup);
+    return payload;
+  };
+
+  const reloadProspectLayer = async () => {
+    const map = mapRef.current;
+    if (!map) {
+      return null;
+    }
+
+    yearFeaturesCacheRef.current.delete("prospects");
+    const existingLayer = datasetLayerRefs.current.get("prospects");
+    if (existingLayer) {
+      map.removeLayer(existingLayer);
+      datasetLayerRefs.current.delete("prospects");
+    }
+
+    const payload = await fetchProspectFeatures();
+    if (!payload || mapRef.current !== map || !map.getContainer()) {
+      return payload;
+    }
+
+    const layerGroup = buildProspectLayerGroup(payload);
+    layerGroup.addTo(map);
+    datasetLayerRefs.current.set("prospects", layerGroup);
+    return payload;
+  };
+
   const appendProspectToActiveLayer = (prospect) => {
     const layerGroup = datasetLayerRefs.current.get("prospects");
     if (!layerGroup) {
-      return;
+      return false;
     }
 
     const marker = L.circleMarker([prospect.latitude, prospect.longitude], {
@@ -1098,6 +1271,7 @@ export default function TimeTravelMap({
       openFeature({
         id: prospect.id,
         kind: "prospect",
+        ownerId: prospect.ownerId,
         title: prospect.title,
         ageLabel: prospect.ageLabel,
         dateVisited: prospect.dateVisited,
@@ -1109,20 +1283,44 @@ export default function TimeTravelMap({
     });
 
     marker.addTo(layerGroup);
+    return true;
   };
 
   const appendFeatureToActiveYear = (year, feature) => {
     const layerGroup = datasetLayerRefs.current.get(`year:${year}`);
     if (!layerGroup) {
-      return;
+      return false;
     }
 
     if (feature.kind === "event") {
       createEventFeatureLayer(feature, openFeature).addTo(layerGroup);
-      return;
+      return true;
     }
 
     createFindFeatureLayer(feature, openFeature).addTo(layerGroup);
+    return true;
+  };
+
+  const mergeFeatureIntoYearCache = (year, feature) => {
+    const cached = yearFeaturesCacheRef.current.get(year);
+    if (!cached) {
+      return;
+    }
+
+    const nextEvents =
+      feature.kind === "event"
+        ? [...(cached.events ?? []).filter((entry) => entry.id !== feature.id), feature]
+        : cached.events ?? [];
+    const nextFinds =
+      feature.kind === "find"
+        ? [...(cached.finds ?? []).filter((entry) => entry.id !== feature.id), feature]
+        : cached.finds ?? [];
+
+    yearFeaturesCacheRef.current.set(year, {
+      ...cached,
+      events: nextEvents,
+      finds: nextFinds
+    });
   };
 
   const saveEditedFeatureGeometry = async () => {
@@ -1210,7 +1408,7 @@ export default function TimeTravelMap({
 
     const body = await response.json().catch(() => null);
     if (!response.ok) {
-      throw new Error(body?.error ?? "Failed to create event");
+      throw new Error(buildApiErrorMessage(body, "Failed to create event"));
     }
 
     const event = body?.event;
@@ -1218,10 +1416,13 @@ export default function TimeTravelMap({
       throw new Error("Missing event payload");
     }
 
-    const eventYear = Number.parseInt(String(event.eventDate).slice(0, 4), 10);
-    if (Number.isFinite(eventYear)) {
-      appendFeatureToActiveYear(eventYear, event);
-      refreshYear(eventYear);
+    const eventYear = getYearFromDateLike(event.eventDate) ?? getYearFromDateLike(values.date);
+    if (eventYear !== null) {
+      if (activeYears.includes(eventYear)) {
+        await reloadYearLayer(eventYear);
+      } else {
+        refreshYear(eventYear);
+      }
     }
 
     void onDatasetsChanged();
@@ -1229,7 +1430,7 @@ export default function TimeTravelMap({
       ...current,
       [`event:${event.id}`]: event
     }));
-    openFeature(event);
+    setSelectedFeature(null);
     clearDraft();
 
     if (mapRef.current && event.geometry) {
@@ -1272,10 +1473,13 @@ export default function TimeTravelMap({
       throw new Error("Missing find payload");
     }
 
-    const findYear = Number.parseInt(String(find.findDate).slice(0, 4), 10);
-    if (Number.isFinite(findYear)) {
-      appendFeatureToActiveYear(findYear, find);
-      refreshYear(findYear);
+    const findYear = getYearFromDateLike(find.findDate) ?? getYearFromDateLike(values.date);
+    if (findYear !== null) {
+      if (activeYears.includes(findYear)) {
+        await reloadYearLayer(findYear);
+      } else {
+        refreshYear(findYear);
+      }
     }
 
     void onDatasetsChanged();
@@ -1283,7 +1487,7 @@ export default function TimeTravelMap({
       ...current,
       [`find:${find.id}`]: find
     }));
-    openFeature(find);
+    setSelectedFeature(null);
     clearDraft();
 
     if (mapRef.current) {
@@ -1325,14 +1529,17 @@ export default function TimeTravelMap({
         throw new Error("Missing prospect payload");
       }
 
-      appendProspectToActiveLayer(prospect);
-      refreshProspects();
+      if (prospectsActive) {
+        await reloadProspectLayer();
+      } else {
+        refreshProspects();
+      }
       void onDatasetsChanged();
       setFeatureOverrides((current) => ({
         ...current,
         [`prospect:${prospect.id}`]: prospect
       }));
-      openFeature(prospect);
+      setSelectedFeature(null);
       clearDraft();
 
       if (mapRef.current) {
@@ -1393,19 +1600,7 @@ export default function TimeTravelMap({
           return;
         }
 
-        const layerGroup = L.layerGroup();
-
-        for (const event of (payload.events ?? []).filter(
-          (feature) => !(editingFeature?.kind === "event" && editingFeature.id === feature.id)
-        )) {
-          createEventFeatureLayer(event, openFeature).addTo(layerGroup);
-        }
-
-        for (const find of (payload.finds ?? []).filter(
-          (feature) => !(editingFeature?.kind === "find" && editingFeature.id === feature.id)
-        )) {
-          createFindFeatureLayer(find, openFeature).addTo(layerGroup);
-        }
+        const layerGroup = buildYearLayerGroup(payload);
 
         if (cancelled || mapRef.current !== map || !map.getContainer()) {
           return;
@@ -1424,49 +1619,7 @@ export default function TimeTravelMap({
           return;
         }
 
-        const layerGroup = L.layerGroup();
-
-        for (const prospect of (payload.prospects ?? []).filter(
-          (feature) => !(editingFeature?.kind === "prospect" && editingFeature.id === feature.id)
-        )) {
-          const marker = L.circleMarker([prospect.latitude, prospect.longitude], {
-            radius: 8,
-            color: "#9a7a07",
-            fillColor: "#f0c419",
-            fillOpacity: 0.92,
-            weight: 2
-          });
-
-          marker.bindTooltip(
-            [
-              `<strong>${prospect.title}</strong>`,
-              `${prospect.latitude}, ${prospect.longitude}`,
-              `<a href="https://www.google.com/maps/place/${prospect.latitude},${prospect.longitude}" target="_blank" rel="noreferrer">Google Maps Link</a>`
-            ].join("<br>"),
-            {
-            direction: "top",
-            offset: [0, -8],
-            opacity: 0.95,
-            interactive: true
-          }
-          );
-
-          marker.on("click", (clickEvent) => {
-            L.DomEvent.stopPropagation(clickEvent);
-            openFeature({
-              id: prospect.id,
-              kind: "prospect",
-              title: prospect.title,
-              ageLabel: prospect.ageLabel,
-              dateVisited: prospect.dateVisited,
-              latitude: prospect.latitude,
-              longitude: prospect.longitude,
-              description: prospect.description,
-              images: prospect.images ?? []
-            });
-          });
-          marker.addTo(layerGroup);
-        }
+        const layerGroup = buildProspectLayerGroup(payload);
 
         if (cancelled || mapRef.current !== map || !map.getContainer()) {
           return;
@@ -1486,7 +1639,7 @@ export default function TimeTravelMap({
 
   return (
     <main className="min-h-screen bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.7),transparent_45%),linear-gradient(180deg,#dce8ef_0%,#c3d2db_100%)] p-8 max-[700px]:p-4">
-      <section className="mx-auto mb-5 flex max-w-[1400px] items-end justify-between gap-6 max-[700px]:mb-4 max-[700px]:flex-col max-[700px]:items-start">
+      <section className="relative z-[4000] mx-auto mb-5 flex max-w-[1400px] items-end justify-between gap-6 max-[700px]:mb-4 max-[700px]:flex-col max-[700px]:items-start">
         <div>
           <div className="flex items-center gap-3.5">
             <span className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-b from-[#eaf1f5] to-[#d6e2e8] text-[#15313f] shadow-[inset_0_1px_0_rgba(255,255,255,0.65)]">
@@ -1496,6 +1649,22 @@ export default function TimeTravelMap({
               Time Travel Map
             </h1>
           </div>
+        </div>
+        <div className="relative z-[4001] flex items-center gap-3 self-start">
+          {currentUserId ? (
+            <UserButton />
+          ) : (
+            <Button
+              type="button"
+              onClick={() => {
+                setShowAuthModal(true);
+              }}
+              className="inline-flex items-center gap-2"
+            >
+              <LogIn size={15} strokeWidth={2.2} />
+              <span>Sign In</span>
+            </Button>
+          )}
         </div>
       </section>
 
@@ -1569,32 +1738,38 @@ export default function TimeTravelMap({
               </>
             ) : (
               <>
-                <Button
-                  type="button"
-                  onClick={startEventDraw}
-                  className="inline-flex items-center gap-2"
-                >
-                  <PencilRuler size={15} strokeWidth={2.2} />
-                  <span className="max-[700px]:sr-only">New Event</span>
-                </Button>
+                {currentUserId ? (
+                  <>
+                    <Button
+                      type="button"
+                      onClick={startEventDraw}
+                      className="inline-flex items-center gap-2"
+                    >
+                      <PencilRuler size={15} strokeWidth={2.2} />
+                      <span className="max-[700px]:sr-only">New Event</span>
+                    </Button>
 
-                <Button
-                  type="button"
-                  onClick={startFindDraw}
-                  className="inline-flex items-center gap-2"
-                >
-                  <Coins size={15} strokeWidth={2.2} />
-                  <span className="max-[700px]:sr-only">New Find</span>
-                </Button>
+                    <Button
+                      type="button"
+                      onClick={startFindDraw}
+                      className="inline-flex items-center gap-2"
+                    >
+                      <Coins size={15} strokeWidth={2.2} />
+                      <span className="max-[700px]:sr-only">New Find</span>
+                    </Button>
 
-                <Button
-                  type="button"
-                  onClick={startProspectDraw}
-                  className="inline-flex items-center gap-2"
-                >
-                  <MapPinned size={15} strokeWidth={2.2} />
-                  <span className="max-[700px]:sr-only">New Prospect</span>
-                </Button>
+                    <Button
+                      type="button"
+                      onClick={startProspectDraw}
+                      className="inline-flex items-center gap-2"
+                    >
+                      <MapPinned size={15} strokeWidth={2.2} />
+                      <span className="max-[700px]:sr-only">New Prospect</span>
+                    </Button>
+                  </>
+                ) : (
+                  <div />
+                )}
               </>
             )}
 
@@ -1614,7 +1789,11 @@ export default function TimeTravelMap({
             </Button>
             </div>
 
-            <div className="ml-auto inline-flex shrink-0 items-center gap-2 rounded-full border border-[rgba(21,49,63,0.08)] bg-[rgba(255,255,255,0.52)] px-3 py-2 text-[12px] font-bold uppercase tracking-[0.08em] text-[#5a6d78] max-[700px]:hidden">
+            <div
+              className={`ml-auto inline-flex shrink-0 items-center gap-2 rounded-full border border-[rgba(21,49,63,0.08)] bg-[rgba(255,255,255,0.52)] px-3 py-2 text-[12px] font-bold uppercase tracking-[0.08em] text-[#5a6d78] ${
+                creationMode ? "max-[700px]:hidden" : ""
+              }`}
+            >
               <Search size={15} strokeWidth={2.2} />
               <span>{zoomLabel}</span>
             </div>
@@ -1634,25 +1813,29 @@ export default function TimeTravelMap({
         />
       </Card>
 
-      <DatasetsCard
-        years={datasets?.years ?? []}
-        prospectCount={datasets?.prospects?.count ?? 0}
-        prospectEntries={datasets?.prospects?.entries ?? []}
-        loading={datasets?.loading}
-        activeYears={activeYears}
-        prospectsActive={prospectsActive}
-        onToggleYear={onToggleYear}
-        onSelectEntry={(year, entry) => {
-          void focusDatasetEntry(year, entry);
-        }}
-        onSelectProspect={(prospectId) => {
-          void focusProspectEntry(prospectId);
-        }}
-        onToggleProspects={onToggleProspects}
-      />
+      {currentUserId ? (
+        <DatasetsCard
+          years={datasets?.years ?? []}
+          prospectCount={datasets?.prospects?.count ?? 0}
+          prospectEntries={datasets?.prospects?.entries ?? []}
+          loading={datasets?.loading}
+          debug={datasetDebug}
+          activeYears={activeYears}
+          prospectsActive={prospectsActive}
+          onToggleYear={onToggleYear}
+          onSelectEntry={(year, entry) => {
+            void focusDatasetEntry(year, entry);
+          }}
+          onSelectProspect={(prospectId) => {
+            void focusProspectEntry(prospectId);
+          }}
+          onToggleProspects={onToggleProspects}
+        />
+      ) : null}
 
       <FeatureDetailsModal
         feature={selectedFeature}
+        currentUserId={currentUserId}
         onClose={() => setSelectedFeature(null)}
         onFeatureChange={(feature) => {
           setSelectedFeature(feature);
@@ -1694,6 +1877,61 @@ export default function TimeTravelMap({
         onClose={() => setShowCreateFeatureModal(false)}
         onSubmit={createFeature}
       />
-    </main>
+
+      {showAuthModal ? (
+        <div className="fixed inset-0 z-[1200] flex items-center justify-center bg-slate-950/45 px-4 py-8 backdrop-blur-sm">
+          <button
+            type="button"
+            aria-label="Close sign in"
+            className="absolute inset-0"
+            onClick={() => {
+              setShowAuthModal(false);
+            }}
+          />
+          <div className="relative z-[1201] w-full max-w-md rounded-[28px] border border-slate-200 bg-white p-6 shadow-[0_32px_120px_rgba(15,23,42,0.22)]">
+            <div className="mb-5 flex items-start justify-between gap-4">
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-slate-500">
+                  Account
+                </p>
+                <h2 className="mt-2 text-2xl font-semibold tracking-[-0.03em] text-slate-950">
+                  Sign In
+                </h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowAuthModal(false);
+                  setAuthPending(false);
+                  setAuthError("");
+                }}
+                className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 text-slate-500 transition hover:border-slate-300 hover:text-slate-900"
+                aria-label="Close sign in panel"
+              >
+                <X size={18} strokeWidth={2.2} />
+              </button>
+            </div>
+            <div className="space-y-4">
+              <p className="text-sm leading-6 text-slate-600">
+                Sign in with your Google account to manage your events, finds, prospects, and images.
+              </p>
+              <Button
+                type="button"
+                onClick={() => {
+                  void beginGoogleSignIn();
+                }}
+                disabled={authPending}
+                className="flex w-full items-center justify-center gap-3 rounded-2xl border-slate-200 bg-white py-4 text-[15px] font-semibold text-slate-900 shadow-none hover:bg-slate-50 disabled:cursor-wait disabled:opacity-70"
+              >
+                <BrandIcons.Google iconSize={20} />
+                <span>{authPending ? "Opening Google…" : "Sign in with Google"}</span>
+              </Button>
+              {authError ? <p className="text-sm text-rose-600">{authError}</p> : null}
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      </main>
   );
 }

@@ -1,5 +1,7 @@
 import "leaflet/dist/leaflet.css";
 import "./globals.css";
+import { StackProvider } from "@stackframe/stack";
+import { stackClientApp } from "../stack";
 
 export const metadata = {
   title: "time travel map",
@@ -9,7 +11,9 @@ export const metadata = {
 export default function RootLayout({ children }) {
   return (
     <html lang="en">
-      <body className="antialiased">{children}</body>
+      <body className="antialiased">
+        <StackProvider app={stackClientApp}>{children}</StackProvider>
+      </body>
     </html>
   );
 }

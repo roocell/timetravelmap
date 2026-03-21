@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getStackUser } from "../../../stack";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -28,136 +29,178 @@ type ProspectListRow = {
   date_visited: Date | string | null;
 };
 
-export async function GET() {
-  const { prisma } = await import("../../../lib/prisma");
-  const [eventRows, findRows, eventListRows, findListRows, prospectCount, prospectListRows] =
-    await Promise.all([
-    prisma.$queryRaw<YearCount[]>`
-      select extract(year from event_date)::int as year, count(*)::bigint as count
-      from timetravelmap.events
-      group by 1
-      order by 1 desc
-    `,
-    prisma.$queryRaw<YearCount[]>`
-      select extract(year from find_date)::int as year, count(*)::bigint as count
-      from timetravelmap.finds
-      group by 1
-      order by 1 desc
-    `,
-    prisma.$queryRaw<EventListRow[]>`
-      select
-        extract(year from event_date)::int as year,
-        id,
-        title,
-        event_date
-      from timetravelmap.events
-      order by event_date asc, title asc
-    `,
-    prisma.$queryRaw<FindListRow[]>`
-      select
-        extract(year from find_date)::int as year,
-        id,
-        title,
-        find_date
-      from timetravelmap.finds
-      order by find_date asc, title asc
-    `,
-    prisma.prospect.count(),
-    prisma.$queryRaw<ProspectListRow[]>`
-      select
-        id,
-        title,
-        date_visited
-      from timetravelmap.prospects
-      order by date_visited asc nulls last, title asc
-    `
-  ]);
-
-  const years = new Map<
-    number,
-    {
-      year: number;
-      eventCount: number;
-      findCount: number;
-      entries: Array<{
-        id: string;
-        kind: "event" | "find";
-        title: string;
-        date: string;
-      }>;
-    }
-  >();
-
-  for (const row of eventRows) {
-    years.set(row.year, {
-      year: row.year,
-      eventCount: Number(row.count),
-      findCount: years.get(row.year)?.findCount ?? 0,
-      entries: years.get(row.year)?.entries ?? []
-    });
+function toSafeNumber(value: bigint | number | string | null | undefined) {
+  if (typeof value === "bigint") {
+    return Number(value);
   }
 
-  for (const row of findRows) {
-    const existing = years.get(row.year);
-    years.set(row.year, {
-      year: row.year,
-      eventCount: existing?.eventCount ?? 0,
-      findCount: Number(row.count),
-      entries: existing?.entries ?? []
-    });
+  if (typeof value === "number") {
+    return value;
   }
 
-  for (const row of eventListRows) {
-    const existing = years.get(row.year);
-    if (!existing) {
-      continue;
+  if (typeof value === "string" && value.length > 0) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  return 0;
+}
+
+export async function GET(request: Request) {
+  try {
+    const user = await getStackUser(request);
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    existing.entries.push({
-      id: row.id,
-      kind: "event",
-      title: row.title,
-      date: String(row.event_date).slice(0, 10)
-    });
-  }
+    const { prisma } = await import("../../../lib/prisma");
+    const [eventRows, findRows, eventListRows, findListRows, prospectCountRows, prospectListRows] =
+      await Promise.all([
+      prisma.$queryRaw<YearCount[]>`
+        select extract(year from event_date)::int as year, count(*)::bigint as count
+        from timetravelmap.events
+        where owner_id = ${user.id}
+        group by 1
+        order by 1 desc
+      `,
+      prisma.$queryRaw<YearCount[]>`
+        select extract(year from find_date)::int as year, count(*)::bigint as count
+        from timetravelmap.finds
+        where owner_id = ${user.id}
+        group by 1
+        order by 1 desc
+      `,
+      prisma.$queryRaw<EventListRow[]>`
+        select
+          extract(year from event_date)::int as year,
+          id,
+          title,
+          event_date
+        from timetravelmap.events
+        where owner_id = ${user.id}
+        order by event_date asc, title asc
+      `,
+      prisma.$queryRaw<FindListRow[]>`
+        select
+          extract(year from find_date)::int as year,
+          id,
+          title,
+          find_date
+        from timetravelmap.finds
+        where owner_id = ${user.id}
+        order by find_date asc, title asc
+      `,
+      prisma.$queryRaw<Array<{ count: bigint | number | string }>>`
+        select count(*)::bigint as count
+        from timetravelmap.prospects
+        where owner_id = ${user.id}
+      `,
+      prisma.$queryRaw<ProspectListRow[]>`
+        select
+          id,
+          title,
+          date_visited
+        from timetravelmap.prospects
+        where owner_id = ${user.id}
+        order by date_visited asc nulls last, title asc
+      `
+    ]);
 
-  for (const row of findListRows) {
-    const existing = years.get(row.year);
-    if (!existing) {
-      continue;
+    const years = new Map<
+      number,
+      {
+        year: number;
+        eventCount: number;
+        findCount: number;
+        entries: Array<{
+          id: string;
+          kind: "event" | "find";
+          title: string;
+          date: string;
+        }>;
+      }
+    >();
+
+    for (const row of eventRows) {
+      const year = toSafeNumber(row.year);
+      years.set(year, {
+        year,
+        eventCount: toSafeNumber(row.count),
+        findCount: years.get(year)?.findCount ?? 0,
+        entries: years.get(year)?.entries ?? []
+      });
     }
 
-    existing.entries.push({
-      id: row.id,
-      kind: "find",
-      title: row.title,
-      date: String(row.find_date).slice(0, 10)
-    });
-  }
+    for (const row of findRows) {
+      const year = toSafeNumber(row.year);
+      const existing = years.get(year);
+      years.set(year, {
+        year,
+        eventCount: existing?.eventCount ?? 0,
+        findCount: toSafeNumber(row.count),
+        entries: existing?.entries ?? []
+      });
+    }
 
-  for (const year of years.values()) {
-    year.entries.sort((left, right) => {
-      if (left.date !== right.date) {
-        return left.date.localeCompare(right.date);
+    for (const row of eventListRows) {
+      const existing = years.get(toSafeNumber(row.year));
+      if (!existing) {
+        continue;
       }
 
-      if (left.kind !== right.kind) {
-        return left.kind.localeCompare(right.kind);
-      }
-
-      return left.title.localeCompare(right.title);
-    });
-  }
-
-  return NextResponse.json({
-    years: [...years.values()].sort((left, right) => right.year - left.year),
-    prospects: {
-      count: prospectCount,
-      entries: prospectListRows.map((row) => ({
+      existing.entries.push({
         id: row.id,
+        kind: "event",
         title: row.title,
-        date: row.date_visited ? String(row.date_visited).slice(0, 10) : null
-      }))
+        date: String(row.event_date).slice(0, 10)
+      });
     }
-  });
+
+    for (const row of findListRows) {
+      const existing = years.get(toSafeNumber(row.year));
+      if (!existing) {
+        continue;
+      }
+
+      existing.entries.push({
+        id: row.id,
+        kind: "find",
+        title: row.title,
+        date: String(row.find_date).slice(0, 10)
+      });
+    }
+
+    for (const year of years.values()) {
+      year.entries.sort((left, right) => {
+        if (left.date !== right.date) {
+          return left.date.localeCompare(right.date);
+        }
+
+        if (left.kind !== right.kind) {
+          return left.kind.localeCompare(right.kind);
+        }
+
+        return left.title.localeCompare(right.title);
+      });
+    }
+
+    return NextResponse.json({
+      years: [...years.values()].sort((left, right) => right.year - left.year),
+      prospects: {
+        count: toSafeNumber(prospectCountRows[0]?.count),
+        entries: prospectListRows.map((row) => ({
+          id: row.id,
+          title: row.title,
+          date: row.date_visited ? String(row.date_visited).slice(0, 10) : null
+        }))
+      }
+    });
+  } catch (error) {
+    return NextResponse.json(
+      {
+        error: error instanceof Error ? error.message : "Unknown datasets error"
+      },
+      { status: 500 }
+    );
+  }
 }
