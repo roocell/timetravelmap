@@ -6,3 +6,7 @@ out
 .env.local
 public/images/
 public/tiles/
+!public/images/
+!public/images/.gitkeep
+!public/tiles/
+!public/tiles/.gitkeep
