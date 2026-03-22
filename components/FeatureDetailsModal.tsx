@@ -141,7 +141,7 @@ function renderRichText(value: string) {
   return value.split(/\n{2,}/).map((paragraph, paragraphIndex) => (
     <p
       key={`paragraph-${paragraphIndex}`}
-      className="text-[15px] leading-7 text-[#445965]"
+      className="break-words text-[15px] leading-7 text-[#445965]"
     >
       {paragraph.split(/(https?:\/\/[^\s]+)/g).map((part, index) => {
         if (/^https?:\/\/[^\s]+$/.test(part)) {
@@ -151,7 +151,7 @@ function renderRichText(value: string) {
               href={part}
               target="_blank"
               rel="noreferrer"
-              className="font-medium text-[#0f5e7d] underline underline-offset-4"
+              className="break-all font-medium text-[#0f5e7d] underline underline-offset-4"
             >
               {part}
             </a>
@@ -159,7 +159,7 @@ function renderRichText(value: string) {
         }
 
         return (
-          <span key={`text-${paragraphIndex}-${index}`} className="whitespace-pre-wrap">
+          <span key={`text-${paragraphIndex}-${index}`} className="whitespace-pre-wrap break-words">
             {part}
           </span>
         );
