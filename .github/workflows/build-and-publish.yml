@@ -13,6 +13,7 @@ env:
 jobs:
   docker:
     runs-on: ubuntu-latest
+    environment: timetravelmap-production-ghcr
     permissions:
       contents: read
       packages: write
