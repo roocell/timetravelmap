@@ -1005,7 +1005,7 @@ export default function TimeTravelMap({
 
     map.on("click", handleMapClick);
     map.on("zoom", () => {
-      setZoomLabel(map.getZoom());
+      setZoomLabel(Math.round(map.getZoom()));
     });
     map.on("moveend", persistMapView);
     map.on("zoomend", persistMapView);
@@ -1013,7 +1013,7 @@ export default function TimeTravelMap({
 
     ensureLayer(initialLayerIndex);
     setActiveLayerOpacities(initialLayerIndex, true);
-    setZoomLabel(map.getZoom());
+    setZoomLabel(Math.round(map.getZoom()));
     persistMapView();
     showCurrentLocation();
     geolocationIntervalRef.current = window.setInterval(showCurrentLocation, 5000);
