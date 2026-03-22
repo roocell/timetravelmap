@@ -150,6 +150,7 @@ async function readFeature(prisma: Awaited<typeof import("../../../../../lib/pri
       title: event.title,
       description: event.description,
       eventDate: event.eventDate.toISOString().slice(0, 10),
+      areaM2: event.areaM2,
       durationMinutes: event.durationMinutes,
       deviceUsed: event.deviceUsed,
       deviceMode: event.deviceMode,

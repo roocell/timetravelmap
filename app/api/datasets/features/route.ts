@@ -18,6 +18,7 @@ type EventRow = {
   owner_id: string | null;
   title: string;
   event_date: Date | string;
+  area_m2: number | null;
   duration_minutes: number | null;
   device_used: string | null;
   device_mode: string | null;
@@ -146,6 +147,7 @@ export async function GET(request: NextRequest) {
         owner_id,
         title,
         event_date,
+        area_m2,
         duration_minutes,
         device_used,
         device_mode,
@@ -228,6 +230,7 @@ export async function GET(request: NextRequest) {
       ownerId: event.owner_id,
       title: event.title,
       eventDate: event.event_date,
+      areaM2: event.area_m2,
       durationMinutes: event.duration_minutes,
       deviceUsed: event.device_used,
       deviceMode: event.device_mode,

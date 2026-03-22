@@ -9,6 +9,7 @@ type DatasetYear = {
   year: number;
   eventCount: number;
   findCount: number;
+  areaTotalM2?: number;
   entries: Array<{
     id: string;
     kind: "event" | "find";
@@ -17,6 +18,19 @@ type DatasetYear = {
     description: string | null;
   }>;
 };
+
+function formatAreaSummary(areaTotalM2?: number) {
+  const area = Number(areaTotalM2 ?? 0);
+  if (!Number.isFinite(area) || area <= 0) {
+    return null;
+  }
+
+  if (area >= 10000) {
+    return `${(area / 10000).toFixed(2)} ha`;
+  }
+
+  return `${Math.round(area).toLocaleString()} m²`;
+}
 
 type DatasetsCardProps = {
   years: DatasetYear[];
@@ -186,6 +200,7 @@ export default function DatasetsCard({
         {filteredYears.map((yearEntry) => {
           const isExpanded = isSearching ? true : expandedYears.includes(yearEntry.year);
           const isActive = activeYears.includes(yearEntry.year);
+          const areaSummary = formatAreaSummary(yearEntry.areaTotalM2);
 
           return (
             <div
@@ -208,6 +223,8 @@ export default function DatasetsCard({
                     {yearEntry.eventCount > 0 ? `${yearEntry.eventCount} events` : null}
                     {yearEntry.eventCount > 0 && yearEntry.findCount > 0 ? " · " : null}
                     {yearEntry.findCount > 0 ? `${yearEntry.findCount} finds` : null}
+                    {areaSummary ? " · " : null}
+                    {areaSummary}
                   </span>
                 </Button>
 

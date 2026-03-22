@@ -61,6 +61,7 @@ model Event {
   fillColor        String?               @map("fill_color")
   outlineColor     String?               @map("outline_color")
   outlineWidth     Decimal?              @map("outline_width") @db.Decimal(6, 2)
+  areaM2           Float?                @map("area_m2")
   area             Unsupported("geometry(MultiPolygon, 4326)")
   sourceFile       String?               @map("source_file")
   sourcePlacemarkId String?              @map("source_placemark_id")

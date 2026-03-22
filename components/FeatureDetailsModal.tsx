@@ -31,6 +31,7 @@ export type FeatureDetails = {
   findDate?: string | null;
   dateVisited?: string | null;
   durationMinutes?: number | null;
+  areaM2?: number | null;
   deviceUsed?: string | null;
   deviceMode?: string | null;
   ageLabel?: string | null;
@@ -169,6 +170,19 @@ function renderRichText(value: string) {
 
 function formatDateOnly(value: string) {
   return value.slice(0, 10);
+}
+
+function formatAreaValue(value?: number | null) {
+  const area = Number(value ?? 0);
+  if (!Number.isFinite(area) || area <= 0) {
+    return null;
+  }
+
+  if (area >= 10000) {
+    return `${(area / 10000).toFixed(2)} hectares`;
+  }
+
+  return `${Math.round(area).toLocaleString()} m²`;
 }
 
 function getFindShortLabel(feature: FeatureDetails | null) {
@@ -605,6 +619,11 @@ export default function FeatureDetailsModal({
                       onSave: (value) => saveField({ durationMinutes: value })
                     }}
                     readonlyProps={{ label: "Duration (minutes)", value: draftFeature.durationMinutes, placeholder: "Not set" }}
+                  />
+                  <ReadonlyField
+                    label="Area"
+                    value={formatAreaValue(draftFeature.areaM2)}
+                    placeholder="Not available"
                   />
                   <FieldRenderer
                     editable={canEdit}

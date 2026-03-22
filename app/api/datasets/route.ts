@@ -9,6 +9,11 @@ type YearCount = {
   count: bigint | number;
 };
 
+type EventAreaRow = {
+  year: number;
+  area_m2: number | string | null;
+};
+
 type EventListRow = {
   year: number;
   id: string;
@@ -57,7 +62,7 @@ export async function GET(request: Request) {
     }
 
     const { prisma } = await import("../../../lib/prisma");
-    const [eventRows, findRows, eventListRows, findListRows, prospectCountRows, prospectListRows] =
+    const [eventRows, findRows, eventAreaRows, eventListRows, findListRows, prospectCountRows, prospectListRows] =
       await Promise.all([
       prisma.$queryRaw<YearCount[]>`
         select extract(year from event_date)::int as year, count(*)::bigint as count
@@ -69,6 +74,15 @@ export async function GET(request: Request) {
       prisma.$queryRaw<YearCount[]>`
         select extract(year from find_date)::int as year, count(*)::bigint as count
         from timetravelmap.finds
+        where owner_id = ${user.id}
+        group by 1
+        order by 1 desc
+      `,
+      prisma.$queryRaw<EventAreaRow[]>`
+        select
+          extract(year from event_date)::int as year,
+          coalesce(sum(area_m2), 0)::double precision as area_m2
+        from timetravelmap.events
         where owner_id = ${user.id}
         group by 1
         order by 1 desc
@@ -118,6 +132,7 @@ export async function GET(request: Request) {
         year: number;
         eventCount: number;
         findCount: number;
+        areaTotalM2: number;
         entries: Array<{
           id: string;
           kind: "event" | "find";
@@ -134,6 +149,7 @@ export async function GET(request: Request) {
         year,
         eventCount: toSafeNumber(row.count),
         findCount: years.get(year)?.findCount ?? 0,
+        areaTotalM2: years.get(year)?.areaTotalM2 ?? 0,
         entries: years.get(year)?.entries ?? []
       });
     }
@@ -145,6 +161,19 @@ export async function GET(request: Request) {
         year,
         eventCount: existing?.eventCount ?? 0,
         findCount: toSafeNumber(row.count),
+        areaTotalM2: existing?.areaTotalM2 ?? 0,
+        entries: existing?.entries ?? []
+      });
+    }
+
+    for (const row of eventAreaRows) {
+      const year = toSafeNumber(row.year);
+      const existing = years.get(year);
+      years.set(year, {
+        year,
+        eventCount: existing?.eventCount ?? 0,
+        findCount: existing?.findCount ?? 0,
+        areaTotalM2: toSafeNumber(row.area_m2),
         entries: existing?.entries ?? []
       });
     }
