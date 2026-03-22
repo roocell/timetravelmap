@@ -25,11 +25,11 @@ function formatAreaSummary(areaTotalM2?: number) {
     return null;
   }
 
-  if (area >= 10000) {
-    return `${(area / 10000).toFixed(2)} ha`;
+  if (area >= 1_000_000) {
+    return `${(area / 1_000_000).toFixed(2)} km²`;
   }
 
-  return `${Math.round(area).toLocaleString()} m²`;
+  return `${Math.round(area)} m²`;
 }
 
 type DatasetsCardProps = {
