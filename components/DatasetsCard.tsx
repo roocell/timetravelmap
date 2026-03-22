@@ -1,7 +1,7 @@
 "use client";
 
-import { ChevronDown, ChevronUp, Database, MapPinned } from "lucide-react";
-import { useRef, useState } from "react";
+import { ChevronDown, ChevronUp, Database, MapPinned, Search, X } from "lucide-react";
+import { useMemo, useRef, useState } from "react";
 import { Button } from "./ui/Button";
 import { Card } from "./ui/Card";
 
@@ -14,6 +14,7 @@ type DatasetYear = {
     kind: "event" | "find";
     title: string;
     date: string;
+    description: string | null;
   }>;
 };
 
@@ -24,6 +25,7 @@ type DatasetsCardProps = {
     id: string;
     title: string;
     date: string | null;
+    description: string | null;
   }>;
   loading?: boolean;
   debug?: {
@@ -57,11 +59,44 @@ export default function DatasetsCard({
 }: DatasetsCardProps) {
   const [expandedYears, setExpandedYears] = useState<number[]>([]);
   const [prospectsExpanded, setProspectsExpanded] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
   const yearRowRefs = useRef<Record<number, HTMLDivElement | null>>({});
   const prospectsRowRef = useRef<HTMLDivElement | null>(null);
-  const showProspects = prospectCount > 0 || prospectEntries.length > 0;
+  const normalizedQuery = searchQuery.trim().toLowerCase();
+  const isSearching = normalizedQuery.length > 0;
   const activeButtonClass =
     "border-[rgba(11,34,45,0.92)] bg-gradient-to-b from-[#173745] to-[#0f2731] text-[#f3f8fa] shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_16px_32px_rgba(11,34,45,0.28)]";
+
+  const filteredYears = useMemo(() => {
+    if (!isSearching) {
+      return years;
+    }
+
+    return years
+      .map((yearEntry) => ({
+        ...yearEntry,
+        entries: yearEntry.entries.filter((entry) => {
+          const haystack = `${entry.title} ${entry.description ?? ""}`.toLowerCase();
+          return haystack.includes(normalizedQuery);
+        })
+      }))
+      .filter((yearEntry) => yearEntry.entries.length > 0);
+  }, [years, isSearching, normalizedQuery]);
+
+  const filteredProspectEntries = useMemo(() => {
+    if (!isSearching) {
+      return prospectEntries;
+    }
+
+    return prospectEntries.filter((entry) => {
+      const haystack = `${entry.title} ${entry.description ?? ""}`.toLowerCase();
+      return haystack.includes(normalizedQuery);
+    });
+  }, [prospectEntries, isSearching, normalizedQuery]);
+
+  const showProspects = isSearching
+    ? filteredProspectEntries.length > 0
+    : prospectCount > 0 || prospectEntries.length > 0;
 
   const toggleExpandedYear = (year: number) => {
     const row = yearRowRefs.current[year];
@@ -102,12 +137,38 @@ export default function DatasetsCard({
 
   return (
     <Card className="mx-auto mt-[18px] max-w-[1400px]">
-      <div className="flex flex-col items-start justify-between gap-4 border-b border-[rgba(21,49,63,0.08)] bg-gradient-to-b from-[rgba(244,248,250,0.96)] to-[rgba(237,243,246,0.96)] px-[22px] py-[20px] md:flex-row md:items-end">
-        <div className="inline-flex items-center gap-[10px] text-[13px] font-extrabold uppercase tracking-[0.08em] text-[#15313f]">
+      <div className="flex flex-wrap items-center gap-4 border-b border-[rgba(21,49,63,0.08)] bg-gradient-to-b from-[rgba(244,248,250,0.96)] to-[rgba(237,243,246,0.96)] px-[22px] py-[20px]">
+        <div className="inline-flex shrink-0 items-center gap-[10px] text-[13px] font-extrabold uppercase tracking-[0.08em] text-[#15313f]">
           <Database size={16} strokeWidth={1.9} />
           <span>Data Sets</span>
         </div>
-        <p className="m-0 text-[13px] text-[#5e727d]">Event, Finds, Prospects Layers</p>
+        <label className="relative mx-auto min-w-[280px] max-w-[420px] flex-1">
+          <Search
+            size={15}
+            strokeWidth={2}
+            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#6a7d88]"
+          />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.currentTarget.value)}
+            placeholder="Search titles and descriptions"
+            className="w-full rounded-2xl border border-[rgba(21,49,63,0.12)] bg-white/90 py-2.5 pl-10 pr-10 text-[14px] text-[#15313f] outline-none placeholder:text-[#7b8d97]"
+          />
+          {searchQuery ? (
+            <button
+              type="button"
+              onClick={() => setSearchQuery("")}
+              className="absolute right-3 top-1/2 inline-flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full text-[#6a7d88] transition hover:bg-[rgba(21,49,63,0.08)] hover:text-[#15313f]"
+              aria-label="Clear search"
+            >
+              <X size={14} strokeWidth={2.2} />
+            </button>
+          ) : null}
+        </label>
+        <p className="m-0 ml-auto shrink-0 text-right text-[13px] text-[#5e727d] max-[700px]:hidden">
+          Event, Finds, Prospects Layers
+        </p>
       </div>
 
       <div className="grid gap-3 p-[18px]">
@@ -122,8 +183,8 @@ export default function DatasetsCard({
           </div>
         ) : null}
 
-        {years.map((yearEntry) => {
-          const isExpanded = expandedYears.includes(yearEntry.year);
+        {filteredYears.map((yearEntry) => {
+          const isExpanded = isSearching ? true : expandedYears.includes(yearEntry.year);
           const isActive = activeYears.includes(yearEntry.year);
 
           return (
@@ -212,7 +273,7 @@ export default function DatasetsCard({
                   <span>Prospects</span>
                 </span>
                 <span className="text-[13px] font-semibold text-[#60737e]">
-                  {prospectCount} records
+                  {isSearching ? filteredProspectEntries.length : prospectCount} records
                 </span>
               </Button>
 
@@ -220,9 +281,9 @@ export default function DatasetsCard({
                 type="button"
                 onClick={toggleProspectsExpanded}
                 className="inline-flex w-14 shrink-0 items-center justify-center border-l border-[rgba(21,49,63,0.08)] bg-[rgba(244,248,250,0.95)] text-[#526773] transition hover:bg-[rgba(235,242,246,0.98)]"
-                aria-label={`${prospectsExpanded ? "Hide" : "Show"} prospect entries`}
+                aria-label={`${(isSearching || prospectsExpanded) ? "Hide" : "Show"} prospect entries`}
               >
-                {prospectsExpanded ? (
+                {isSearching || prospectsExpanded ? (
                   <ChevronUp size={18} strokeWidth={2.2} />
                 ) : (
                   <ChevronDown size={18} strokeWidth={2.2} />
@@ -230,10 +291,10 @@ export default function DatasetsCard({
               </button>
             </div>
 
-            {prospectsExpanded ? (
+            {isSearching || prospectsExpanded ? (
               <div className="border-t border-[rgba(21,49,63,0.08)] bg-[rgba(247,250,252,0.96)] px-4 py-3">
                 <div className="grid gap-2">
-                  {prospectEntries.map((entry) => (
+                  {filteredProspectEntries.map((entry) => (
                     <button
                       type="button"
                       key={entry.id}
@@ -256,6 +317,12 @@ export default function DatasetsCard({
                 </div>
               </div>
             ) : null}
+          </div>
+        ) : null}
+
+        {isSearching && filteredYears.length === 0 && filteredProspectEntries.length === 0 ? (
+          <div className="rounded-2xl border border-[rgba(21,49,63,0.08)] bg-white/70 px-4 py-5 text-[14px] text-[#5e727d]">
+            No matching items found.
           </div>
         ) : null}
       </div>

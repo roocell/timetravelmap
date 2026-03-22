@@ -14,6 +14,7 @@ type EventListRow = {
   id: string;
   title: string;
   event_date: Date | string;
+  description: string | null;
 };
 
 type FindListRow = {
@@ -21,12 +22,14 @@ type FindListRow = {
   id: string;
   title: string;
   find_date: Date | string;
+  description: string | null;
 };
 
 type ProspectListRow = {
   id: string;
   title: string;
   date_visited: Date | string | null;
+  description: string | null;
 };
 
 function toSafeNumber(value: bigint | number | string | null | undefined) {
@@ -75,7 +78,8 @@ export async function GET(request: Request) {
           extract(year from event_date)::int as year,
           id,
           title,
-          event_date
+          event_date,
+          description
         from timetravelmap.events
         where owner_id = ${user.id}
         order by event_date asc, title asc
@@ -85,7 +89,8 @@ export async function GET(request: Request) {
           extract(year from find_date)::int as year,
           id,
           title,
-          find_date
+          find_date,
+          description
         from timetravelmap.finds
         where owner_id = ${user.id}
         order by find_date asc, title asc
@@ -99,7 +104,8 @@ export async function GET(request: Request) {
         select
           id,
           title,
-          date_visited
+          date_visited,
+          description
         from timetravelmap.prospects
         where owner_id = ${user.id}
         order by date_visited asc nulls last, title asc
@@ -117,6 +123,7 @@ export async function GET(request: Request) {
           kind: "event" | "find";
           title: string;
           date: string;
+          description: string | null;
         }>;
       }
     >();
@@ -152,7 +159,8 @@ export async function GET(request: Request) {
         id: row.id,
         kind: "event",
         title: row.title,
-        date: String(row.event_date).slice(0, 10)
+        date: String(row.event_date).slice(0, 10),
+        description: row.description
       });
     }
 
@@ -166,7 +174,8 @@ export async function GET(request: Request) {
         id: row.id,
         kind: "find",
         title: row.title,
-        date: String(row.find_date).slice(0, 10)
+        date: String(row.find_date).slice(0, 10),
+        description: row.description
       });
     }
 
@@ -191,7 +200,8 @@ export async function GET(request: Request) {
         entries: prospectListRows.map((row) => ({
           id: row.id,
           title: row.title,
-          date: row.date_visited ? String(row.date_visited).slice(0, 10) : null
+          date: row.date_visited ? String(row.date_visited).slice(0, 10) : null,
+          description: row.description
         }))
       }
     });
