@@ -41,6 +41,19 @@ map with various historical aerial photos. use a slider to time travel.
 * app env vars are expected in `.env`
 * `.env` and `.env.local` are gitignored
 
+## deployment
+
+* Docker Compose is available in `docker-compose.yml`
+* the app image can also be built on GitHub Actions and published to GHCR
+* workflow file: `.github/workflows/build-and-publish.yml`
+* GHCR image name will be `ghcr.io/<owner>/timetravelmap`
+* set these GitHub repo settings before using the workflow:
+  * Actions variable: `NEXT_PUBLIC_SUPABASE_URL`
+  * Actions variable: `NEXT_PUBLIC_STACK_PROJECT_ID`
+  * Actions secret: `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+  * Actions secret: `NEXT_PUBLIC_STACK_PUBLISHABLE_CLIENT_KEY`
+* runtime-only secrets like `DATABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and `STACK_SECRET_SERVER_KEY` should stay configured in Coolify, not baked into the image
+
 ## recent implementation decisions
 
 * the old Flask app has been removed from the active runtime path
