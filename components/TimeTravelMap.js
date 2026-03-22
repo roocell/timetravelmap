@@ -1241,26 +1241,12 @@ export default function TimeTravelMap({
       (feature) => !(editingFeature?.kind === "prospect" && editingFeature.id === feature.id)
     )) {
       const marker = L.circleMarker([prospect.latitude, prospect.longitude], {
-        radius: 8,
+        radius: 12,
         color: "#9a7a07",
         fillColor: "#f0c419",
         fillOpacity: 0.92,
         weight: 2
       });
-
-      marker.bindTooltip(
-        [
-          `<strong>${prospect.title}</strong>`,
-          `${prospect.latitude}, ${prospect.longitude}`,
-          `<a href="https://www.google.com/maps/place/${prospect.latitude},${prospect.longitude}" target="_blank" rel="noreferrer">Google Maps Link</a>`
-        ].join("<br>"),
-        {
-          direction: "top",
-          offset: [0, -8],
-          opacity: 0.95,
-          interactive: true
-        }
-      );
 
       marker.on("click", (clickEvent) => {
         L.DomEvent.stopPropagation(clickEvent);
@@ -1333,26 +1319,12 @@ export default function TimeTravelMap({
     }
 
     const marker = L.circleMarker([prospect.latitude, prospect.longitude], {
-      radius: 8,
+      radius: 12,
       color: "#9a7a07",
       fillColor: "#f0c419",
       fillOpacity: 0.92,
       weight: 2
     });
-
-    marker.bindTooltip(
-      [
-        `<strong>${prospect.title}</strong>`,
-        `${prospect.latitude}, ${prospect.longitude}`,
-        `<a href="https://www.google.com/maps/place/${prospect.latitude},${prospect.longitude}" target="_blank" rel="noreferrer">Google Maps Link</a>`
-      ].join("<br>"),
-      {
-        direction: "top",
-        offset: [0, -8],
-        opacity: 0.95,
-        interactive: true
-      }
-    );
 
     marker.on("click", (clickEvent) => {
       L.DomEvent.stopPropagation(clickEvent);
