@@ -245,15 +245,14 @@ export default function CreateFeatureModal({
   };
 
   return (
-    <div className="fixed inset-0 z-[1200] flex items-center justify-center bg-[rgba(15,29,39,0.6)] p-4 backdrop-blur-sm">
-      <div className="w-full max-w-3xl rounded-[28px] border border-[rgba(33,55,70,0.14)] bg-[rgba(250,252,253,0.98)] shadow-[0_30px_100px_rgba(14,31,41,0.28)]">
-        <div className="flex items-start justify-between gap-4 border-b border-[rgba(21,49,63,0.08)] px-6 py-5">
+    <div className="fixed inset-0 z-[5000] overflow-y-auto bg-[rgba(15,29,39,0.6)] p-4 backdrop-blur-sm max-[700px]:px-3 max-[700px]:py-4">
+      <div className="flex min-h-full items-center justify-center max-[700px]:items-start">
+        <div className="my-auto w-full max-w-3xl rounded-[28px] border border-[rgba(33,55,70,0.14)] bg-[rgba(250,252,253,0.98)] shadow-[0_30px_100px_rgba(14,31,41,0.28)] max-[700px]:my-0 max-[700px]:rounded-[24px]">
+        <div className="flex items-start justify-between gap-4 px-6 pb-1 pt-4">
           <div className="grid gap-1">
             <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-[#6a7d88]">
               {copy.eyebrow}
             </p>
-            <h2 className="text-2xl font-semibold text-[#15313f]">{copy.title}</h2>
-            <p className="text-sm text-[#526773]">{copy.helper}</p>
           </div>
 
           <button
@@ -265,7 +264,7 @@ export default function CreateFeatureModal({
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="grid gap-5 px-6 py-6">
+        <form onSubmit={handleSubmit} className="grid gap-5 px-6 pb-6 pt-3">
           <div className="grid gap-5 md:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
             <div className="min-w-0 grid gap-4">
               <Field
@@ -557,6 +556,7 @@ export default function CreateFeatureModal({
             </button>
           </div>
         </form>
+        </div>
       </div>
     </div>
   );

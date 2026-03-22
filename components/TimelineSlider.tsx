@@ -29,12 +29,12 @@ export default function TimelineSlider({
           <SlidersHorizontal size={16} strokeWidth={2} />
           <span>Timeline</span>
         </div>
-        <div className="text-[12px] font-bold uppercase tracking-[0.08em] text-[#6a7d88]">
+        <div className="text-[12px] font-bold uppercase tracking-[0.08em] text-[#6a7d88] max-[700px]:hidden">
           Drag to fade between years
         </div>
       </div>
 
-      <div className="flex items-center justify-between gap-6 max-[700px]:flex-col max-[700px]:items-stretch max-[700px]:gap-2.5">
+      <div className="flex items-center justify-between gap-6 max-[700px]:gap-3">
         <div className="min-w-0 flex-1">
           <div className="w-full">
             <input
@@ -50,7 +50,7 @@ export default function TimelineSlider({
             />
           </div>
 
-          <div className="flex justify-between gap-3 overflow-x-auto pb-1 text-[13px] font-bold text-[#526773]">
+          <div className="flex justify-between gap-3 overflow-x-auto pb-1 text-[13px] font-bold text-[#526773] max-[700px]:hidden">
             {orderedLabels.map((label) => (
               <span key={String(label)} className="whitespace-nowrap">
                 {label}
@@ -59,7 +59,7 @@ export default function TimelineSlider({
           </div>
         </div>
 
-        <div className="inline-flex min-w-24 shrink-0 items-center justify-end gap-2 text-right text-[13px] font-bold text-[#15313f] max-[700px]:min-w-0 max-[700px]:text-left">
+        <div className="inline-flex min-w-24 shrink-0 items-center justify-end gap-2 text-right text-[13px] font-bold text-[#15313f] max-[700px]:min-w-fit">
           <Clock3 size={15} strokeWidth={2} />
           <span>{currentLabel}</span>
         </div>

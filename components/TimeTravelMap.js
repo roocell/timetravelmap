@@ -5,6 +5,7 @@ import L from "leaflet";
 import {
   Check,
   Coins,
+  Crosshair,
   Eye,
   EyeOff,
   Layers3,
@@ -32,17 +33,20 @@ const DEFAULT_ZOOM = 12;
 const MIN_NATIVE_ZOOM = 12;
 const MAX_NATIVE_ZOOM = 12;
 
-const layerUrls = [
-  "/tiles/1879/{z}/{x}/{y}.png",
-  "/tiles/1928/{z}/{x}/{y}.png",
-  "/tiles/1930s/{z}/{x}/{y}.png",
-  "/tiles/1945/{z}/{x}/{y}.png",
-  "/tiles/1954/{z}/{x}/{y}.png",
-  "/tiles/1958/{z}/{x}/{y}.png",
-  "/tiles/1965/{z}/{x}/{y}.png",
-  "/tiles/2015_lidar/{z}/{x}/{y}.png",
-  "/tiles/hrdem/{z}/{x}/{y}.png",
-  "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+const layerDefinitions = [
+  { key: "1879", url: "/tiles/1879/{z}/{x}/{y}.png" },
+  { key: "1928", url: "/tiles/1928/{z}/{x}/{y}.png" },
+  { key: "1930s", url: "/tiles/1930s/{z}/{x}/{y}.png" },
+  { key: "1945", url: "/tiles/1945/{z}/{x}/{y}.png" },
+  { key: "1954", url: "/tiles/1954/{z}/{x}/{y}.png" },
+  { key: "1958", url: "/tiles/1958/{z}/{x}/{y}.png" },
+  { key: "1965", url: "/tiles/1965/{z}/{x}/{y}.png" },
+  { key: "2015_lidar", url: "/tiles/2015_lidar/{z}/{x}/{y}.png" },
+  { key: "hrdem", url: "/tiles/hrdem/{z}/{x}/{y}.png" },
+  {
+    key: null,
+    url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+  }
 ];
 
 const sliderValues = [
@@ -76,16 +80,20 @@ function getNumericParam(searchParams, name, fallback) {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
-function createTileLayer(url, opacity) {
+function createTileLayer(layerDefinition, opacity, tileLayerMeta) {
+  const url = layerDefinition?.url;
   if (typeof url !== "string" || url.length === 0) {
     return null;
   }
 
   const isRemoteImagery = url.includes("arcgisonline");
+  const localMeta = layerDefinition?.key ? tileLayerMeta?.[layerDefinition.key] : null;
+  const minNativeZoom = isRemoteImagery ? 12 : localMeta?.minNativeZoom ?? MIN_NATIVE_ZOOM;
+  const maxNativeZoom = isRemoteImagery ? 17 : localMeta?.maxNativeZoom ?? MAX_NATIVE_ZOOM;
 
   return L.tileLayer(url, {
-    minNativeZoom: isRemoteImagery ? 12 : MIN_NATIVE_ZOOM,
-    maxNativeZoom: isRemoteImagery ? 17 : MAX_NATIVE_ZOOM,
+    minNativeZoom,
+    maxNativeZoom,
     minZoom: 5,
     maxZoom: 22,
     opacity,
@@ -420,6 +428,7 @@ export default function TimeTravelMap({
   const [authPending, setAuthPending] = useState(false);
   const [authError, setAuthError] = useState("");
   const [editingFeature, setEditingFeature] = useState(null);
+  const [tileLayerMeta, setTileLayerMeta] = useState({});
   const previousEditingDatasetKeyRef = useRef(null);
 
   useEffect(() => {
@@ -442,6 +451,29 @@ export default function TimeTravelMap({
     }
   }, [currentUserId]);
 
+  useEffect(() => {
+    const state = { cancelled: false };
+
+    const loadTileLayerMeta = async () => {
+      try {
+        const response = await fetch("/api/tiles/meta", {
+          cache: "no-store"
+        });
+        const payload = await response.json().catch(() => ({}));
+
+        if (!state.cancelled && response.ok && payload && typeof payload === "object") {
+          setTileLayerMeta(payload);
+        }
+      } catch {}
+    };
+
+    void loadTileLayerMeta();
+
+    return () => {
+      state.cancelled = true;
+    };
+  }, []);
+
   const beginGoogleSignIn = async () => {
     setAuthPending(true);
     setAuthError("");
@@ -457,6 +489,33 @@ export default function TimeTravelMap({
   const openFeature = (feature) => {
     const overrideKey = `${feature.kind}:${feature.id}`;
     setSelectedFeature(featureOverridesRef.current[overrideKey] ?? feature);
+  };
+
+  const zoomToCurrentLocation = () => {
+    const map = mapRef.current;
+    if (!map || typeof navigator === "undefined" || !navigator.geolocation) {
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const point = [position.coords.latitude, position.coords.longitude];
+
+        if (currentLocationMarkerRef.current) {
+          currentLocationMarkerRef.current.setLatLng(point);
+        } else {
+          currentLocationMarkerRef.current = L.circleMarker(point, {
+            color: "blue",
+            fillColor: "blue",
+            fillOpacity: 0.6,
+            radius: 8
+          }).addTo(map);
+        }
+
+        map.setView(point, Math.max(map.getZoom(), 16));
+      },
+      () => {}
+    );
   };
 
   const clearDraft = () => {
@@ -738,17 +797,17 @@ export default function TimeTravelMap({
   const ensureLayer = (layerIndex) => {
     const map = mapRef.current;
 
-    if (!map || layerIndex < 0 || layerIndex >= layerUrls.length) {
+    if (!map || layerIndex < 0 || layerIndex >= layerDefinitions.length) {
       return null;
     }
 
-    const layerUrl = layerUrls[layerIndex];
-    if (typeof layerUrl !== "string" || layerUrl.length === 0) {
+    const layerDefinition = layerDefinitions[layerIndex];
+    if (typeof layerDefinition?.url !== "string" || layerDefinition.url.length === 0) {
       return null;
     }
 
     if (!layerRefs.current[layerIndex]) {
-      const layer = createTileLayer(layerUrl, 0);
+      const layer = createTileLayer(layerDefinition, 0, tileLayerMeta);
       if (!layer) {
         return null;
       }
@@ -759,6 +818,33 @@ export default function TimeTravelMap({
 
     return layerRefs.current[layerIndex];
   };
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || Object.keys(tileLayerMeta).length === 0) {
+      return;
+    }
+
+    layerRefs.current.forEach((layer, index) => {
+      const layerDefinition = layerDefinitions[index];
+      if (!layer || !layerDefinition?.key || !tileLayerMeta[layerDefinition.key]) {
+        return;
+      }
+
+      const opacity = typeof layer.options?.opacity === "number" ? layer.options.opacity : 0;
+      map.removeLayer(layer);
+
+      const nextLayer = createTileLayer(layerDefinition, opacity, tileLayerMeta);
+      if (!nextLayer) {
+        layerRefs.current[index] = null;
+        return;
+      }
+
+      nextLayer.on("tileerror", () => {});
+      nextLayer.addTo(map);
+      layerRefs.current[index] = nextLayer;
+    });
+  }, [tileLayerMeta]);
 
   const setActiveLayerOpacities = (value, visible) => {
     const layer1Index = Math.floor(value);
@@ -784,7 +870,7 @@ export default function TimeTravelMap({
         return;
       }
 
-      if (index === layer2Index && layer2Index < layerUrls.length) {
+      if (index === layer2Index && layer2Index < layerDefinitions.length) {
         layer.setOpacity(layer2Opacity);
         return;
       }
@@ -825,7 +911,7 @@ export default function TimeTravelMap({
       : savedView?.sliderValue ?? 1;
     const initialLayerIndex = Math.min(
       Math.max(requestedLayerIndex, 0),
-      layerUrls.length - 1
+      layerDefinitions.length - 1
     );
 
     currentLayerIndexRef.current = initialLayerIndex;
@@ -1639,18 +1725,18 @@ export default function TimeTravelMap({
 
   return (
     <main className="min-h-screen bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.7),transparent_45%),linear-gradient(180deg,#dce8ef_0%,#c3d2db_100%)] p-8 max-[700px]:p-4">
-      <section className="relative z-[4000] mx-auto mb-5 flex max-w-[1400px] items-end justify-between gap-6 max-[700px]:mb-4 max-[700px]:flex-col max-[700px]:items-start">
-        <div>
-          <div className="flex items-center gap-3.5">
+      <section className="relative z-[4000] mx-auto mb-5 flex max-w-[1400px] items-center justify-between gap-6 max-[700px]:mb-4 max-[700px]:gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="flex min-w-0 items-center gap-3 max-[700px]:gap-2.5">
             <span className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-b from-[#eaf1f5] to-[#d6e2e8] text-[#15313f] shadow-[inset_0_1px_0_rgba(255,255,255,0.65)]">
               <MapIcon size={24} strokeWidth={2.1} />
             </span>
-            <h1 className="m-0 text-[clamp(28px,4vw,44px)] leading-[0.95] text-[#15313f]">
+            <h1 className="m-0 min-w-0 text-[clamp(28px,4vw,44px)] leading-[0.95] text-[#15313f] max-[700px]:text-[24px]">
               Time Travel Map
             </h1>
           </div>
         </div>
-        <div className="relative z-[4001] flex items-center gap-3 self-start">
+        <div className="relative z-[4001] flex shrink-0 items-center gap-3">
           {currentUserId ? (
             <UserButton />
           ) : (
@@ -1677,8 +1763,8 @@ export default function TimeTravelMap({
             </div>
           </div>
 
-          <div className="flex min-w-0 flex-1 items-center justify-between gap-3 max-[700px]:items-center">
-            <div className="flex min-w-0 items-center gap-3 max-[700px]:flex-1 max-[700px]:gap-2">
+          <div className="flex min-w-0 flex-1 items-center justify-between gap-3 max-[700px]:gap-2 max-[700px]:items-center">
+            <div className="flex min-w-0 items-center gap-3 max-[700px]:flex-1 max-[700px]:gap-1.5">
             {creationMode ? (
               <>
                 <div className="rounded-[10px] border border-[rgba(21,49,63,0.12)] bg-[rgba(255,255,255,0.78)] px-3 py-2 text-[13px] font-semibold text-[#526773] max-[700px]:hidden">
@@ -1698,7 +1784,7 @@ export default function TimeTravelMap({
                   variant="ghost"
                   onClick={undoDraftPoint}
                   disabled={draftPoints.length === 0}
-                  className="inline-flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="inline-flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-50 max-[700px]:px-2.5"
                 >
                   <Undo2 size={15} strokeWidth={2.2} />
                   <span className="max-[700px]:sr-only">Undo</span>
@@ -1710,7 +1796,7 @@ export default function TimeTravelMap({
                   disabled={
                     creationMode === "event" ? draftPoints.length < 3 : draftPoints.length < 1
                   }
-                  className="inline-flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="inline-flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-50 max-[700px]:px-2.5"
                 >
                   <Check size={15} strokeWidth={2.2} />
                   <span className="max-[700px]:sr-only">
@@ -1730,7 +1816,7 @@ export default function TimeTravelMap({
                   type="button"
                   variant="ghost"
                   onClick={clearDraft}
-                  className="inline-flex items-center gap-2"
+                  className="inline-flex items-center gap-2 max-[700px]:px-2.5"
                 >
                   <X size={15} strokeWidth={2.2} />
                   <span className="max-[700px]:sr-only">Cancel</span>
@@ -1743,7 +1829,7 @@ export default function TimeTravelMap({
                     <Button
                       type="button"
                       onClick={startEventDraw}
-                      className="inline-flex items-center gap-2"
+                      className="inline-flex items-center gap-2 max-[700px]:px-2.5"
                     >
                       <PencilRuler size={15} strokeWidth={2.2} />
                       <span className="max-[700px]:sr-only">New Event</span>
@@ -1752,7 +1838,7 @@ export default function TimeTravelMap({
                     <Button
                       type="button"
                       onClick={startFindDraw}
-                      className="inline-flex items-center gap-2"
+                      className="inline-flex items-center gap-2 max-[700px]:px-2.5"
                     >
                       <Coins size={15} strokeWidth={2.2} />
                       <span className="max-[700px]:sr-only">New Find</span>
@@ -1761,10 +1847,19 @@ export default function TimeTravelMap({
                     <Button
                       type="button"
                       onClick={startProspectDraw}
-                      className="inline-flex items-center gap-2"
+                      className="inline-flex items-center gap-2 max-[700px]:px-2.5"
                     >
                       <MapPinned size={15} strokeWidth={2.2} />
                       <span className="max-[700px]:sr-only">New Prospect</span>
+                    </Button>
+
+                    <Button
+                      type="button"
+                      onClick={zoomToCurrentLocation}
+                      className="inline-flex items-center gap-2 max-[700px]:px-2.5"
+                    >
+                      <Crosshair size={15} strokeWidth={2.2} />
+                      <span className="max-[700px]:sr-only">Current Location</span>
                     </Button>
                   </>
                 ) : (
@@ -1776,7 +1871,7 @@ export default function TimeTravelMap({
             <Button
               type="button"
               onClick={toggleLayers}
-              className="inline-flex items-center gap-2"
+              className="inline-flex items-center gap-2 max-[700px]:px-2.5"
             >
               {layersVisible ? (
                 <Eye size={15} strokeWidth={2.2} />
@@ -1790,7 +1885,7 @@ export default function TimeTravelMap({
             </div>
 
             <div
-              className={`ml-auto inline-flex shrink-0 items-center gap-2 rounded-full border border-[rgba(21,49,63,0.08)] bg-[rgba(255,255,255,0.52)] px-3 py-2 text-[12px] font-bold uppercase tracking-[0.08em] text-[#5a6d78] ${
+              className={`ml-auto inline-flex shrink-0 items-center gap-1.5 rounded-full border border-[rgba(21,49,63,0.08)] bg-[rgba(255,255,255,0.52)] px-3 py-2 text-[12px] font-bold uppercase tracking-[0.08em] text-[#5a6d78] max-[700px]:px-2.5 ${
                 creationMode ? "max-[700px]:hidden" : ""
               }`}
             >
@@ -1806,7 +1901,7 @@ export default function TimeTravelMap({
 
         <TimelineSlider
           labels={sliderValues}
-          max={layerUrls.length - 1}
+          max={layerDefinitions.length - 1}
           value={sliderValue}
           onChange={handleSliderChange}
           reversed

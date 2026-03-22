@@ -488,8 +488,9 @@ export default function FeatureDetailsModal({
   };
 
   return (
-    <div className="fixed inset-0 z-[1200] flex items-center justify-center bg-[rgba(7,18,24,0.58)] p-4 backdrop-blur-[2px]">
-      <div className="relative max-h-[90vh] w-full max-w-4xl overflow-hidden rounded-[28px] border border-[rgba(255,255,255,0.22)] bg-[linear-gradient(180deg,#f8fbfc_0%,#eef4f7_100%)] shadow-[0_30px_90px_rgba(7,18,24,0.35)]">
+    <div className="fixed inset-0 z-[5000] overflow-y-auto bg-[rgba(7,18,24,0.58)] p-4 backdrop-blur-[2px] max-[700px]:px-3 max-[700px]:py-4">
+      <div className="flex min-h-full items-center justify-center max-[700px]:items-start">
+        <div className="relative my-auto w-full max-w-4xl overflow-hidden rounded-[28px] border border-[rgba(255,255,255,0.22)] bg-[linear-gradient(180deg,#f8fbfc_0%,#eef4f7_100%)] shadow-[0_30px_90px_rgba(7,18,24,0.35)] max-[700px]:my-0 max-[700px]:rounded-[24px]">
         <button
           type="button"
           onClick={onClose}
@@ -499,7 +500,7 @@ export default function FeatureDetailsModal({
           <X size={18} strokeWidth={2.2} />
         </button>
 
-        <div className="max-h-[90vh] overflow-y-auto">
+        <div className="max-h-[90vh] overflow-y-auto max-[700px]:max-h-none">
           <div className="grid gap-0 lg:grid-cols-[1.2fr_0.8fr]">
             <div className="border-b border-[rgba(21,49,63,0.08)] p-6 lg:border-b-0 lg:border-r">
               <div className="mb-5 flex items-center gap-2 text-[12px] font-bold uppercase tracking-[0.08em] text-[#6a7d88]">
@@ -865,10 +866,11 @@ export default function FeatureDetailsModal({
             </div>
           </div>
         </div>
+        </div>
       </div>
 
       {galleryImage ? (
-        <div className="fixed inset-0 z-[1300] flex items-center justify-center bg-[rgba(5,12,18,0.82)] p-4 backdrop-blur-sm">
+        <div className="fixed inset-0 z-[5100] flex items-center justify-center bg-[rgba(5,12,18,0.82)] p-4 backdrop-blur-sm">
           <button
             type="button"
             onClick={() => setGalleryIndex(null)}
@@ -920,7 +922,7 @@ export default function FeatureDetailsModal({
       ) : null}
 
       {pendingDeleteImageSrc ? (
-        <div className="fixed inset-0 z-[1400] flex items-center justify-center bg-[rgba(7,18,24,0.58)] p-4 backdrop-blur-[2px]">
+        <div className="fixed inset-0 z-[5200] flex items-center justify-center bg-[rgba(7,18,24,0.58)] p-4 backdrop-blur-[2px]">
           <div className="w-full max-w-md rounded-[24px] border border-[rgba(255,255,255,0.18)] bg-[linear-gradient(180deg,#f8fbfc_0%,#eef4f7_100%)] p-6 shadow-[0_30px_90px_rgba(7,18,24,0.35)]">
             <h3 className="text-lg font-semibold text-[#15313f]">Delete image?</h3>
             <div className="mt-5 flex gap-3">
@@ -947,7 +949,7 @@ export default function FeatureDetailsModal({
       ) : null}
 
       {pendingDeleteFeature ? (
-        <div className="fixed inset-0 z-[1400] flex items-center justify-center bg-[rgba(7,18,24,0.58)] p-4 backdrop-blur-[2px]">
+        <div className="fixed inset-0 z-[5200] flex items-center justify-center bg-[rgba(7,18,24,0.58)] p-4 backdrop-blur-[2px]">
           <div className="w-full max-w-md rounded-[24px] border border-[rgba(255,255,255,0.18)] bg-[linear-gradient(180deg,#f8fbfc_0%,#eef4f7_100%)] p-6 shadow-[0_30px_90px_rgba(7,18,24,0.35)]">
             <h3 className="text-lg font-semibold text-[#15313f]">Delete {draftFeature.kind}?</h3>
             <div className="mt-5 flex gap-3">
