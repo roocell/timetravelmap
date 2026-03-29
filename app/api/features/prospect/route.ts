@@ -20,6 +20,7 @@ type ProspectRow = {
   id: string;
   title: string;
   age_label: string | null;
+  marker_color: string | null;
   description: string | null;
   date_visited: Date | string | null;
   latitude: number;
@@ -73,6 +74,7 @@ export async function POST(request: NextRequest) {
           title,
           owner_id,
           age_label,
+          marker_color,
           description,
           latitude,
           longitude,
@@ -82,6 +84,7 @@ export async function POST(request: NextRequest) {
           ${title},
           ${user.id},
           ${toNullableString(body?.ageLabel)},
+          ${toNullableString(body?.markerColor) ?? "#f0c419"},
           ${toNullableString(body?.description)},
           ${point.latitude},
           ${point.longitude},
@@ -91,6 +94,7 @@ export async function POST(request: NextRequest) {
           id,
           title,
           age_label,
+          marker_color,
           description,
           date_visited,
           latitude,
@@ -159,6 +163,7 @@ export async function POST(request: NextRequest) {
         ownerId: user.id,
         title: prospect.title,
         ageLabel: prospect.age_label,
+        markerColor: prospect.marker_color,
         description: prospect.description,
         dateVisited: prospect.date_visited ? String(prospect.date_visited).slice(0, 10) : null,
         latitude: prospect.latitude,

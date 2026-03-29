@@ -225,6 +225,7 @@ async function readFeature(prisma: Awaited<typeof import("../../../../../lib/pri
     ownerId: prospect.ownerId,
     title: prospect.title,
     description: prospect.description,
+    markerColor: prospect.markerColor,
     ageLabel: prospect.ageLabel,
     dateVisited: prospect.dateVisited?.toISOString().slice(0, 10) ?? null,
     latitude: prospect.latitude,
@@ -513,6 +514,7 @@ export async function PATCH(
       if ("title" in body) data.title = String(body.title ?? "").trim();
       if ("description" in body) data.description = toNullableString(body.description);
       if ("ageLabel" in body) data.ageLabel = toNullableString(body.ageLabel);
+      if ("markerColor" in body) data.markerColor = toNullableString(body.markerColor) ?? "#f0c419";
       if ("dateVisited" in body) data.dateVisited = toDate(body.dateVisited);
       if ("latitude" in body) data.latitude = toNullableNumber(body.latitude);
       if ("longitude" in body) data.longitude = toNullableNumber(body.longitude);

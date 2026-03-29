@@ -127,6 +127,7 @@ model Prospect {
   ownerId     String?  @map("owner_id")
   title       String
   ageLabel    String?  @map("age_label")
+  markerColor String?  @map("marker_color")
   ageStartYear Int?    @map("age_start_year")
   ageEndYear  Int?     @map("age_end_year")
   description String?

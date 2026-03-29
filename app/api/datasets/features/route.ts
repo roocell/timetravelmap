@@ -49,6 +49,7 @@ type ProspectRow = {
   title: string;
   description: string | null;
   age_label: string | null;
+  marker_color: string | null;
   date_visited: Date | string | null;
   latitude: number;
   longitude: number;
@@ -92,6 +93,7 @@ export async function GET(request: NextRequest) {
         title,
         description,
         age_label,
+        marker_color,
         date_visited,
         latitude,
         longitude
@@ -127,6 +129,7 @@ export async function GET(request: NextRequest) {
         title: prospect.title,
         description: prospect.description,
         ageLabel: prospect.age_label,
+        markerColor: prospect.marker_color,
         dateVisited: prospect.date_visited,
         latitude: prospect.latitude,
         longitude: prospect.longitude,

@@ -35,6 +35,7 @@ export type FeatureDetails = {
   areaM2?: number | null;
   deviceUsed?: string | null;
   deviceMode?: string | null;
+  markerColor?: string | null;
   ageLabel?: string | null;
   type?: string | null;
   metal?: string | null;
@@ -57,11 +58,19 @@ type FeatureDetailsModalProps = {
   onFeatureMove?: (feature: FeatureDetails) => void;
 };
 
+const PROSPECT_MARKER_COLORS = [
+  "#f0c419",
+  "#d7dee5",
+  "#d45c5c",
+  "#4a90e2",
+  "#39a96b"
+];
+
 type EditableFieldProps = {
   label: string;
   value?: string | number | null;
   placeholder?: string;
-  type?: "text" | "date" | "number" | "textarea" | "select";
+  type?: "text" | "date" | "number" | "textarea" | "select" | "color";
   options?: Array<{ label: string; value: string }>;
   onSave: (value: string) => Promise<void>;
   renderPreview?: (value: string) => ReactNode;
@@ -297,6 +306,13 @@ function EditableField({
               </option>
             ))}
           </select>
+        ) : type === "color" ? (
+          <input
+            type="color"
+            value={draft || "#f0c419"}
+            onChange={(event) => setDraft(event.currentTarget.value)}
+            className="h-12 w-full rounded-xl border border-[rgba(21,49,63,0.12)] bg-white p-1.5"
+          />
         ) : (
           <input
             type={type}
@@ -773,6 +789,53 @@ export default function FeatureDetailsModal({
                       )
                     }}
                   />
+                  <DetailShell label="Marker Color">
+                    <div className="flex flex-wrap gap-2">
+                      {PROSPECT_MARKER_COLORS.map((color) => {
+                        const selected =
+                          String(draftFeature.markerColor ?? "#f0c419").toLowerCase() === color.toLowerCase();
+
+                        if (canEdit) {
+                          return (
+                            <button
+                              key={color}
+                              type="button"
+                              onClick={() => {
+                                void saveField({ markerColor: color });
+                              }}
+                              aria-label={`Select marker color ${color}`}
+                              className={`inline-flex h-11 w-11 items-center justify-center rounded-2xl border bg-white transition ${
+                                selected
+                                  ? "border-[#15313f] shadow-[0_0_0_2px_rgba(21,49,63,0.18)]"
+                                  : "border-[rgba(21,49,63,0.12)]"
+                              }`}
+                            >
+                              <span
+                                className="h-6 w-6 rounded-full border border-[rgba(21,49,63,0.18)]"
+                                style={{ backgroundColor: color }}
+                              />
+                            </button>
+                          );
+                        }
+
+                        return (
+                          <div
+                            key={color}
+                            className={`inline-flex h-11 w-11 items-center justify-center rounded-2xl border bg-white ${
+                              selected
+                                ? "border-[#15313f] shadow-[0_0_0_2px_rgba(21,49,63,0.18)]"
+                                : "border-[rgba(21,49,63,0.12)]"
+                            }`}
+                          >
+                            <span
+                              className="h-6 w-6 rounded-full border border-[rgba(21,49,63,0.18)]"
+                              style={{ backgroundColor: color }}
+                            />
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </DetailShell>
                 </>
               ) : null}
 

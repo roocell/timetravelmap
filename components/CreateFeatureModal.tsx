@@ -35,6 +35,7 @@ export type CreateFeatureValues = {
   deviceMode: string;
   fillColor: string;
   outlineColor: string;
+  markerColor: string;
   ageLabel: string;
   type: string;
   metal: string;
@@ -48,6 +49,14 @@ type CreateFeatureModalProps = {
   onClose: () => void;
   onSubmit: (values: CreateFeatureValues) => Promise<void>;
 };
+
+const PROSPECT_MARKER_COLORS = [
+  "#f0c419",
+  "#d7dee5",
+  "#d45c5c",
+  "#4a90e2",
+  "#39a96b"
+];
 
 function getTodayValue() {
   return new Date().toISOString().slice(0, 10);
@@ -70,6 +79,7 @@ function getInitialValues(): CreateFeatureValues {
     deviceMode: "",
     fillColor: "#ffffff",
     outlineColor: "#f0c419",
+    markerColor: "#f0c419",
     ageLabel: "",
     type: "other",
     metal: "",
@@ -533,7 +543,31 @@ export default function CreateFeatureModal({
                       className="w-full min-w-0 rounded-2xl border border-[rgba(21,49,63,0.12)] bg-white px-4 py-3 text-[15px] text-[#15313f] outline-none"
                     />
                   </Field>
-                  <div className="hidden sm:block" />
+                  <Field label="Marker Color" icon={<span className="h-3 w-3 rounded-full bg-[#f0c419]" />}>
+                    <div className="flex flex-wrap gap-2">
+                      {PROSPECT_MARKER_COLORS.map((color) => {
+                        const selected = values.markerColor.toLowerCase() === color.toLowerCase();
+                        return (
+                          <button
+                            key={color}
+                            type="button"
+                            onClick={() => updateValue("markerColor", color)}
+                            aria-label={`Select marker color ${color}`}
+                            className={`inline-flex h-11 w-11 items-center justify-center rounded-2xl border bg-white transition ${
+                              selected
+                                ? "border-[#15313f] shadow-[0_0_0_2px_rgba(21,49,63,0.18)]"
+                                : "border-[rgba(21,49,63,0.12)]"
+                            }`}
+                          >
+                            <span
+                              className="h-6 w-6 rounded-full border border-[rgba(21,49,63,0.18)]"
+                              style={{ backgroundColor: color }}
+                            />
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </Field>
                 </div>
               )}
             </div>

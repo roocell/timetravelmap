@@ -116,6 +116,30 @@ function normalizeLeafletColor(value, fallback) {
   return fallback;
 }
 
+function darkenHexColor(value, amount = 0.32) {
+  const color = normalizeLeafletColor(value, "#f0c419").slice(1);
+  const channels = [0, 2, 4].map((index) => {
+    const channel = Number.parseInt(color.slice(index, index + 2), 16);
+    const darkened = Math.round(channel * (1 - amount));
+    return Math.max(0, Math.min(255, darkened))
+      .toString(16)
+      .padStart(2, "0");
+  });
+
+  return `#${channels.join("")}`;
+}
+
+function getProspectMarkerStyle(prospect) {
+  const fillColor = normalizeLeafletColor(prospect?.markerColor, "#f0c419");
+  return {
+    radius: 12,
+    color: darkenHexColor(fillColor),
+    fillColor,
+    fillOpacity: 0.92,
+    weight: 2
+  };
+}
+
 function getFindShortLabel(find) {
   const type = String(find?.type ?? "").toLowerCase();
   const metal = String(find?.metal ?? "").toUpperCase();
@@ -1203,6 +1227,18 @@ export default function TimeTravelMap({
     }
   };
 
+  const refreshActiveYearLayer = (year) => {
+    if (!Number.isFinite(year)) {
+      return;
+    }
+
+    invalidateYear(year);
+
+    if (activeYears.includes(year)) {
+      setDatasetRefreshToken((current) => current + 1);
+    }
+  };
+
   const refreshProspects = () => {
     yearFeaturesCacheRef.current.delete("prospects");
     const existingLayer = datasetLayerRefs.current.get("prospects");
@@ -1241,11 +1277,7 @@ export default function TimeTravelMap({
       (feature) => !(editingFeature?.kind === "prospect" && editingFeature.id === feature.id)
     )) {
       const marker = L.circleMarker([prospect.latitude, prospect.longitude], {
-        radius: 12,
-        color: "#9a7a07",
-        fillColor: "#f0c419",
-        fillOpacity: 0.92,
-        weight: 2
+        ...getProspectMarkerStyle(prospect)
       });
 
       marker.on("click", (clickEvent) => {
@@ -1257,6 +1289,7 @@ export default function TimeTravelMap({
           title: prospect.title,
           ageLabel: prospect.ageLabel,
           dateVisited: prospect.dateVisited,
+          markerColor: prospect.markerColor,
           latitude: prospect.latitude,
           longitude: prospect.longitude,
           description: prospect.description,
@@ -1319,11 +1352,7 @@ export default function TimeTravelMap({
     }
 
     const marker = L.circleMarker([prospect.latitude, prospect.longitude], {
-      radius: 12,
-      color: "#9a7a07",
-      fillColor: "#f0c419",
-      fillOpacity: 0.92,
-      weight: 2
+      ...getProspectMarkerStyle(prospect)
     });
 
     marker.on("click", (clickEvent) => {
@@ -1335,6 +1364,7 @@ export default function TimeTravelMap({
         title: prospect.title,
         ageLabel: prospect.ageLabel,
         dateVisited: prospect.dateVisited,
+        markerColor: prospect.markerColor,
         latitude: prospect.latitude,
         longitude: prospect.longitude,
         description: prospect.description,
@@ -1573,6 +1603,7 @@ export default function TimeTravelMap({
           title: values.title,
           date: values.date,
           ageLabel: values.ageLabel,
+          markerColor: values.markerColor,
           description: values.description,
           images: values.images,
           point: draftPoints[0]
@@ -1907,11 +1938,39 @@ export default function TimeTravelMap({
         currentUserId={currentUserId}
         onClose={() => setSelectedFeature(null)}
         onFeatureChange={(feature) => {
+          const previousFeature =
+            selectedFeature && selectedFeature.kind === feature.kind && selectedFeature.id === feature.id
+              ? selectedFeature
+              : null;
+
           setSelectedFeature(feature);
           setFeatureOverrides((current) => ({
             ...current,
             [`${feature.kind}:${feature.id}`]: feature
           }));
+
+          if (feature.kind === "prospect") {
+            refreshProspects();
+            void onDatasetsChanged();
+            return;
+          }
+
+          const previousYear = getYearFromDateLike(
+            previousFeature?.kind === "event" ? previousFeature?.eventDate : previousFeature?.findDate
+          );
+          const nextYear = getYearFromDateLike(
+            feature.kind === "event" ? feature.eventDate : feature.findDate
+          );
+
+          if (previousYear !== null) {
+            refreshActiveYearLayer(previousYear);
+          }
+
+          if (nextYear !== null && nextYear !== previousYear) {
+            refreshActiveYearLayer(nextYear);
+          }
+
+          void onDatasetsChanged();
         }}
         onFeatureDelete={(feature) => {
           setSelectedFeature(null);
