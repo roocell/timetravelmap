@@ -386,7 +386,7 @@ export default function CreateFeatureModal({
                           <img
                             src={image.src}
                             alt={getStoredImageName(image.src)}
-                            className="h-full w-full object-cover"
+                            className="feature-image-from-exif h-full w-full object-cover"
                           />
                         </div>
                         <div className="grid gap-2 p-2">

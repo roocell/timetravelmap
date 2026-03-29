@@ -1,5 +1,9 @@
 @import "tailwindcss";
 
+.feature-image-from-exif {
+  image-orientation: from-image;
+}
+
 @theme {
   --font-sans: "Inter", "Helvetica Neue", Helvetica, Arial, sans-serif;
 }

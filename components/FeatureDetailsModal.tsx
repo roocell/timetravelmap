@@ -579,7 +579,7 @@ export default function FeatureDetailsModal({
                   <img
                     src={primaryImage.src}
                     alt={getStoredImageName(primaryImage.src)}
-                    className="h-[360px] w-full object-cover"
+                    className="feature-image-from-exif h-[360px] w-full object-cover"
                   />
                   {primaryImage.caption ? (
                     <div className="border-t border-[rgba(21,49,63,0.08)] px-4 py-3 text-[13px] text-[#526773]">
@@ -792,7 +792,7 @@ export default function FeatureDetailsModal({
                         <img
                           src={image.src}
                           alt={getStoredImageName(image.src)}
-                          className="aspect-square w-full object-cover"
+                          className="feature-image-from-exif aspect-square w-full object-cover"
                         />
                       </button>
                       <div className="truncate px-3 py-2 text-[11px] font-semibold text-[#6a7d88]">
@@ -928,7 +928,7 @@ export default function FeatureDetailsModal({
             <img
               src={galleryImage.src}
               alt={getStoredImageName(galleryImage.src)}
-              className="max-h-[78vh] w-full object-contain"
+              className="feature-image-from-exif max-h-[78vh] w-full object-contain"
             />
 
             <div className="flex items-center justify-between gap-4 border-t border-white/10 px-5 py-4 text-white/80 max-[700px]:flex-col max-[700px]:items-start">
