@@ -185,6 +185,12 @@ function formatAreaValue(value?: number | null) {
   return `${Math.round(area)} m²`;
 }
 
+function getStoredImageName(src: string) {
+  const sanitized = src.split("?")[0]?.split("#")[0] ?? src;
+  const parts = sanitized.split("/").filter(Boolean);
+  return parts[parts.length - 1] ?? src;
+}
+
 function getFindShortLabel(feature: FeatureDetails | null) {
   if (!feature || feature.kind !== "find") {
     return null;
@@ -572,14 +578,18 @@ export default function FeatureDetailsModal({
                 >
                   <img
                     src={primaryImage.src}
-                    alt={primaryImage.altText ?? draftFeature.title}
+                    alt={getStoredImageName(primaryImage.src)}
                     className="h-[360px] w-full object-cover"
                   />
                   {primaryImage.caption ? (
                     <div className="border-t border-[rgba(21,49,63,0.08)] px-4 py-3 text-[13px] text-[#526773]">
                       {primaryImage.caption}
                     </div>
-                  ) : null}
+                  ) : (
+                    <div className="truncate border-t border-[rgba(21,49,63,0.08)] px-4 py-3 text-[13px] text-[#526773]">
+                      {getStoredImageName(primaryImage.src)}
+                    </div>
+                  )}
                 </button>
               ) : (
                 <div className="mt-4 rounded-[24px] border border-dashed border-[rgba(21,49,63,0.16)] bg-white/50 px-5 py-10 text-center text-[14px] text-[#6a7d88]">
@@ -781,10 +791,13 @@ export default function FeatureDetailsModal({
                       >
                         <img
                           src={image.src}
-                          alt={image.altText ?? `${draftFeature.title} image ${index + 1}`}
+                          alt={getStoredImageName(image.src)}
                           className="aspect-square w-full object-cover"
                         />
                       </button>
+                      <div className="truncate px-3 py-2 text-[11px] font-semibold text-[#6a7d88]">
+                        {getStoredImageName(image.src)}
+                      </div>
                       {canEdit ? (
                         <button
                           type="button"
@@ -914,13 +927,13 @@ export default function FeatureDetailsModal({
           <div className="w-full max-w-6xl overflow-hidden rounded-[28px] border border-white/12 bg-[rgba(12,21,28,0.92)] shadow-[0_30px_90px_rgba(0,0,0,0.4)]">
             <img
               src={galleryImage.src}
-              alt={galleryImage.altText ?? draftFeature.title}
+              alt={getStoredImageName(galleryImage.src)}
               className="max-h-[78vh] w-full object-contain"
             />
 
             <div className="flex items-center justify-between gap-4 border-t border-white/10 px-5 py-4 text-white/80 max-[700px]:flex-col max-[700px]:items-start">
               <div className="text-sm">
-                {galleryImage.caption ?? galleryImage.altText ?? draftFeature.title}
+                {galleryImage.caption ?? getStoredImageName(galleryImage.src)}
               </div>
               <div className="text-xs font-bold uppercase tracking-[0.08em] text-white/60">
                 {(currentGalleryPosition ?? 0) + 1} / {images.length}

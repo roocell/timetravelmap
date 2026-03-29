@@ -53,6 +53,12 @@ function getTodayValue() {
   return new Date().toISOString().slice(0, 10);
 }
 
+function getStoredImageName(src: string) {
+  const sanitized = src.split("?")[0]?.split("#")[0] ?? src;
+  const parts = sanitized.split("/").filter(Boolean);
+  return parts[parts.length - 1] ?? src;
+}
+
 function getInitialValues(): CreateFeatureValues {
   return {
     title: "",
@@ -379,11 +385,14 @@ export default function CreateFeatureModal({
                         <div className="aspect-square overflow-hidden bg-[rgba(21,49,63,0.04)]">
                           <img
                             src={image.src}
-                            alt={image.altText ?? "Uploaded feature image"}
+                            alt={getStoredImageName(image.src)}
                             className="h-full w-full object-cover"
                           />
                         </div>
-                        <div className="flex items-center justify-end p-2">
+                        <div className="grid gap-2 p-2">
+                          <div className="truncate text-[11px] font-semibold text-[#6a7d88]">
+                            {getStoredImageName(image.src)}
+                          </div>
                           <button
                             type="button"
                             onClick={() => removeImage(image.src)}
