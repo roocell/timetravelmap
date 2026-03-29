@@ -13,7 +13,7 @@ import {
   Trash2,
   X
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type DragEvent, type ReactNode } from "react";
 
 type FeatureImage = {
   src: string;
@@ -342,6 +342,7 @@ export default function FeatureDetailsModal({
   const [featureDeleting, setFeatureDeleting] = useState(false);
   const [dragActive, setDragActive] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const fileInputId = useId();
 
   useEffect(() => {
     setDraftFeature(feature);
@@ -449,7 +450,7 @@ export default function FeatureDetailsModal({
     }
   };
 
-  const handleDrop = async (event: DragEvent<HTMLButtonElement>) => {
+  const handleDrop = async (event: DragEvent<HTMLElement>) => {
     event.preventDefault();
     setDragActive(false);
 
@@ -804,9 +805,8 @@ export default function FeatureDetailsModal({
 
               {canEdit ? (
                 <div className="mt-2">
-                  <button
-                    type="button"
-                    onClick={() => fileInputRef.current?.click()}
+                  <label
+                    htmlFor={fileInputId}
                     onDragOver={(event) => {
                       event.preventDefault();
                       setDragActive(true);
@@ -815,12 +815,26 @@ export default function FeatureDetailsModal({
                     onDrop={(event) => {
                       void handleDrop(event);
                     }}
-                    className={`mb-4 flex w-full flex-col items-center justify-center rounded-2xl border border-dashed px-4 py-6 text-center transition ${
+                    className={`relative mb-4 flex w-full cursor-pointer flex-col items-center justify-center rounded-2xl border border-dashed px-4 py-6 text-center transition ${
                       dragActive
                         ? "border-[#15313f] bg-[rgba(21,49,63,0.08)]"
                         : "border-[rgba(21,49,63,0.18)] bg-[rgba(247,250,252,0.9)]"
                     }`}
                   >
+                    <input
+                      id={fileInputId}
+                      ref={fileInputRef}
+                      type="file"
+                      multiple
+                      accept="image/*"
+                      className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                      onChange={(event) => {
+                        const files = Array.from(event.currentTarget.files ?? []);
+                        if (files.length > 0) {
+                          void uploadFiles(files);
+                        }
+                      }}
+                    />
                     <ImageUp size={20} className="mb-2 text-[#15313f]" strokeWidth={2.1} />
                     <span className="text-sm font-semibold text-[#15313f]">
                       Drop image{imageSaving ? "s" : ""} here
@@ -828,20 +842,7 @@ export default function FeatureDetailsModal({
                     <span className="mt-1 text-xs text-[#6a7d88]">
                       or click to upload one or more images
                     </span>
-                  </button>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    multiple
-                    accept="image/*"
-                    className="hidden"
-                    onChange={(event) => {
-                      const files = Array.from(event.currentTarget.files ?? []);
-                      if (files.length > 0) {
-                        void uploadFiles(files);
-                      }
-                    }}
-                  />
+                  </label>
                   {imageSaving ? (
                     <div className="text-xs font-bold uppercase tracking-[0.08em] text-[#6a7d88]">
                       Uploading images...

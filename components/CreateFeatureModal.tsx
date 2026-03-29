@@ -12,6 +12,7 @@ import {
 import {
   useEffect,
   useRef,
+  useId,
   useState,
   type DragEvent,
   type FormEvent,
@@ -135,6 +136,7 @@ export default function CreateFeatureModal({
   const [dragActive, setDragActive] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const fileInputId = useId();
 
   useEffect(() => {
     if (!open) {
@@ -209,7 +211,7 @@ export default function CreateFeatureModal({
     }
   };
 
-  const handleDrop = async (event: DragEvent<HTMLButtonElement>) => {
+  const handleDrop = async (event: DragEvent<HTMLElement>) => {
     event.preventDefault();
     setDragActive(false);
 
@@ -326,9 +328,8 @@ export default function CreateFeatureModal({
                   <span>Images</span>
                 </span>
 
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
+                <label
+                  htmlFor={fileInputId}
                   onDragOver={(event) => {
                     event.preventDefault();
                     setDragActive(true);
@@ -340,18 +341,19 @@ export default function CreateFeatureModal({
                     }
                   }}
                   onDrop={handleDrop}
-                  className={`rounded-[24px] border border-dashed px-5 py-8 text-left transition ${
+                  className={`relative block cursor-pointer rounded-[24px] border border-dashed px-5 py-8 text-left transition ${
                     dragActive
                       ? "border-[#0f5e7d] bg-[rgba(140,201,222,0.18)]"
                       : "border-[rgba(21,49,63,0.16)] bg-[rgba(255,255,255,0.5)]"
                   }`}
                 >
                   <input
+                    id={fileInputId}
                     ref={fileInputRef}
                     type="file"
                     accept="image/*"
                     multiple
-                    className="hidden"
+                    className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
                     onChange={(event) => {
                       const files = Array.from(event.currentTarget.files ?? []);
                       void uploadFiles(files);
@@ -365,7 +367,7 @@ export default function CreateFeatureModal({
                       Add one or many images before saving the {mode}.
                     </span>
                   </div>
-                </button>
+                </label>
 
                 {values.images.length ? (
                   <div className="grid grid-cols-2 gap-3">

@@ -16,10 +16,17 @@ function extensionFor(fileName: string, mimeType: string) {
     return ext;
   }
 
+  if (mimeType === "image/heic") return ".heic";
+  if (mimeType === "image/heif") return ".heif";
+  if (mimeType === "image/avif") return ".avif";
   if (mimeType === "image/png") return ".png";
+  if (mimeType === "image/jpg") return ".jpg";
   if (mimeType === "image/jpeg") return ".jpg";
   if (mimeType === "image/webp") return ".webp";
   if (mimeType === "image/gif") return ".gif";
+  if (mimeType === "image/bmp") return ".bmp";
+  if (mimeType === "image/tiff") return ".tiff";
+  if (mimeType === "image/svg+xml") return ".svg";
   return ".bin";
 }
 
