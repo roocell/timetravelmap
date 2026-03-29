@@ -253,10 +253,10 @@ export default function CreateFeatureModal({
   };
 
   return (
-    <div className="fixed inset-0 z-[5000] overflow-y-auto bg-[rgba(15,29,39,0.6)] p-4 backdrop-blur-sm max-[700px]:px-3 max-[700px]:py-4">
+    <div className="fixed inset-0 z-[5000] overflow-x-hidden overflow-y-auto bg-[rgba(15,29,39,0.6)] p-4 backdrop-blur-sm max-[700px]:px-2 max-[700px]:py-3">
       <div className="flex min-h-full items-center justify-center max-[700px]:items-start">
-        <div className="my-auto w-full max-w-3xl rounded-[28px] border border-[rgba(33,55,70,0.14)] bg-[rgba(250,252,253,0.98)] shadow-[0_30px_100px_rgba(14,31,41,0.28)] max-[700px]:my-0 max-[700px]:rounded-[24px]">
-        <div className="flex items-start justify-between gap-4 px-6 pb-1 pt-4">
+        <div className="my-auto w-full min-w-0 max-w-3xl rounded-[28px] border border-[rgba(33,55,70,0.14)] bg-[rgba(250,252,253,0.98)] shadow-[0_30px_100px_rgba(14,31,41,0.28)] max-[700px]:my-0 max-[700px]:rounded-[22px]">
+        <div className="flex items-start justify-between gap-4 px-6 pb-1 pt-4 max-[700px]:px-4 max-[700px]:pt-3">
           <div className="grid gap-1">
             <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-[#6a7d88]">
               {copy.eyebrow}
@@ -272,7 +272,7 @@ export default function CreateFeatureModal({
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="grid gap-5 px-6 pb-6 pt-3">
+        <form onSubmit={handleSubmit} className="grid min-w-0 gap-5 px-6 pb-6 pt-3 max-[700px]:px-4 max-[700px]:pb-4">
           <div className="grid gap-5 md:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
             <div className="min-w-0 grid gap-4">
               <Field
@@ -297,7 +297,7 @@ export default function CreateFeatureModal({
                         ? "Old schoolyard"
                         : "1905 barber dime"
                   }
-                  className="rounded-2xl border border-[rgba(21,49,63,0.12)] bg-white px-4 py-3 text-[15px] text-[#15313f] outline-none"
+                  className="w-full min-w-0 rounded-2xl border border-[rgba(21,49,63,0.12)] bg-white px-4 py-3 text-[15px] text-[#15313f] outline-none"
                   required
                 />
               </Field>
@@ -324,7 +324,7 @@ export default function CreateFeatureModal({
                         ? "Notes about the site, access, clues, and why it looks promising."
                       : "Notes about the find, location context, and condition."
                   }
-                  className="min-h-40 rounded-2xl border border-[rgba(21,49,63,0.12)] bg-white px-4 py-3 text-[15px] text-[#15313f] outline-none"
+                  className="min-h-40 w-full min-w-0 rounded-2xl border border-[rgba(21,49,63,0.12)] bg-white px-4 py-3 text-[15px] text-[#15313f] outline-none"
                 />
               </Field>
 
@@ -347,7 +347,7 @@ export default function CreateFeatureModal({
                     }
                   }}
                   onDrop={handleDrop}
-                  className={`relative block cursor-pointer rounded-[24px] border border-dashed px-5 py-8 text-left transition ${
+                  className={`relative block w-full min-w-0 cursor-pointer rounded-[24px] border border-dashed px-5 py-8 text-left transition ${
                     dragActive
                       ? "border-[#0f5e7d] bg-[rgba(140,201,222,0.18)]"
                       : "border-[rgba(21,49,63,0.16)] bg-[rgba(255,255,255,0.5)]"
@@ -376,20 +376,20 @@ export default function CreateFeatureModal({
                 </label>
 
                 {values.images.length ? (
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid min-w-0 grid-cols-2 gap-3 max-[520px]:grid-cols-1">
                     {values.images.map((image) => (
                       <div
                         key={image.src}
-                        className="overflow-hidden rounded-[20px] border border-[rgba(21,49,63,0.08)] bg-white shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]"
+                        className="min-w-0 overflow-hidden rounded-[20px] border border-[rgba(21,49,63,0.08)] bg-white shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]"
                       >
-                        <div className="aspect-square overflow-hidden bg-[rgba(21,49,63,0.04)]">
+                        <div className="aspect-square w-full overflow-hidden bg-[rgba(21,49,63,0.04)]">
                           <img
                             src={image.src}
                             alt={getStoredImageName(image.src)}
-                            className="feature-image-from-exif h-full w-full object-cover"
+                            className="feature-image-from-exif block h-full w-full max-w-full object-cover"
                           />
                         </div>
-                        <div className="grid gap-2 p-2">
+                        <div className="grid min-w-0 gap-2 p-2">
                           <div className="truncate text-[11px] font-semibold text-[#6a7d88]">
                             {getStoredImageName(image.src)}
                           </div>
@@ -414,7 +414,7 @@ export default function CreateFeatureModal({
                   type="date"
                   value={values.date}
                   onChange={(event) => updateValue("date", event.currentTarget.value)}
-                  className="rounded-2xl border border-[rgba(21,49,63,0.12)] bg-white px-4 py-3 text-[15px] text-[#15313f] outline-none"
+                  className="w-full min-w-0 rounded-2xl border border-[rgba(21,49,63,0.12)] bg-white px-4 py-3 text-[15px] text-[#15313f] outline-none"
                   required={mode !== "prospect"}
                 />
               </Field>
@@ -429,7 +429,7 @@ export default function CreateFeatureModal({
                       value={values.durationMinutes}
                       onChange={(event) => updateValue("durationMinutes", event.currentTarget.value)}
                       placeholder="180"
-                      className="rounded-2xl border border-[rgba(21,49,63,0.12)] bg-white px-4 py-3 text-[15px] text-[#15313f] outline-none"
+                      className="w-full min-w-0 rounded-2xl border border-[rgba(21,49,63,0.12)] bg-white px-4 py-3 text-[15px] text-[#15313f] outline-none"
                     />
                   </Field>
 
@@ -438,7 +438,7 @@ export default function CreateFeatureModal({
                       value={values.deviceUsed}
                       onChange={(event) => updateValue("deviceUsed", event.currentTarget.value)}
                       placeholder="nox600"
-                      className="rounded-2xl border border-[rgba(21,49,63,0.12)] bg-white px-4 py-3 text-[15px] text-[#15313f] outline-none"
+                      className="w-full min-w-0 rounded-2xl border border-[rgba(21,49,63,0.12)] bg-white px-4 py-3 text-[15px] text-[#15313f] outline-none"
                     />
                   </Field>
 
@@ -447,7 +447,7 @@ export default function CreateFeatureModal({
                       value={values.deviceMode}
                       onChange={(event) => updateValue("deviceMode", event.currentTarget.value)}
                       placeholder="f2am"
-                      className="rounded-2xl border border-[rgba(21,49,63,0.12)] bg-white px-4 py-3 text-[15px] text-[#15313f] outline-none"
+                      className="w-full min-w-0 rounded-2xl border border-[rgba(21,49,63,0.12)] bg-white px-4 py-3 text-[15px] text-[#15313f] outline-none"
                     />
                   </Field>
 
@@ -478,7 +478,7 @@ export default function CreateFeatureModal({
                       value={values.ageLabel}
                       onChange={(event) => updateValue("ageLabel", event.currentTarget.value)}
                       placeholder="1905 or 1800s"
-                      className="rounded-2xl border border-[rgba(21,49,63,0.12)] bg-white px-4 py-3 text-[15px] text-[#15313f] outline-none"
+                      className="w-full min-w-0 rounded-2xl border border-[rgba(21,49,63,0.12)] bg-white px-4 py-3 text-[15px] text-[#15313f] outline-none"
                     />
                   </Field>
 
@@ -486,7 +486,7 @@ export default function CreateFeatureModal({
                     <select
                       value={values.type}
                       onChange={(event) => updateValue("type", event.currentTarget.value)}
-                      className="rounded-2xl border border-[rgba(21,49,63,0.12)] bg-white px-4 py-3 text-[15px] text-[#15313f] outline-none"
+                      className="w-full min-w-0 rounded-2xl border border-[rgba(21,49,63,0.12)] bg-white px-4 py-3 text-[15px] text-[#15313f] outline-none"
                     >
                       <option value="coin">Coin</option>
                       <option value="ring">Ring</option>
@@ -530,7 +530,7 @@ export default function CreateFeatureModal({
                       value={values.ageLabel}
                       onChange={(event) => updateValue("ageLabel", event.currentTarget.value)}
                       placeholder="1800s or early 1900s"
-                      className="rounded-2xl border border-[rgba(21,49,63,0.12)] bg-white px-4 py-3 text-[15px] text-[#15313f] outline-none"
+                      className="w-full min-w-0 rounded-2xl border border-[rgba(21,49,63,0.12)] bg-white px-4 py-3 text-[15px] text-[#15313f] outline-none"
                     />
                   </Field>
                   <div className="hidden sm:block" />
@@ -545,18 +545,18 @@ export default function CreateFeatureModal({
             </div>
           ) : null}
 
-          <div className="flex items-center justify-end gap-3 border-t border-[rgba(21,49,63,0.08)] pt-5">
+          <div className="flex items-center justify-end gap-3 border-t border-[rgba(21,49,63,0.08)] pt-5 max-[520px]:flex-col-reverse max-[520px]:items-stretch">
             <button
               type="button"
               onClick={onClose}
-              className="rounded-2xl border border-[rgba(21,49,63,0.12)] bg-white px-4 py-3 text-sm font-semibold text-[#526773]"
+              className="rounded-2xl border border-[rgba(21,49,63,0.12)] bg-white px-4 py-3 text-sm font-semibold text-[#526773] max-[520px]:w-full"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={saving}
-              className="inline-flex items-center gap-2 rounded-2xl bg-[#15313f] px-4 py-3 text-sm font-semibold text-white shadow-[0_14px_30px_rgba(21,49,63,0.2)]"
+              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[#15313f] px-4 py-3 text-sm font-semibold text-white shadow-[0_14px_30px_rgba(21,49,63,0.2)] max-[520px]:w-full"
             >
               <Save size={16} strokeWidth={2.1} />
               <span>

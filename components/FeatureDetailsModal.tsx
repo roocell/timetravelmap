@@ -14,6 +14,7 @@ import {
   X
 } from "lucide-react";
 import { useEffect, useId, useMemo, useRef, useState, type DragEvent, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 
 type FeatureImage = {
   src: string;
@@ -377,6 +378,13 @@ export default function FeatureDetailsModal({
   }
 
   const canEdit = Boolean(draftFeature.ownerId && currentUserId && draftFeature.ownerId === currentUserId);
+  const renderViewportOverlay = (children: ReactNode) => {
+    if (typeof document === "undefined") {
+      return null;
+    }
+
+    return createPortal(children, document.body);
+  };
 
   const pushUpdate = (updatedFeature: FeatureDetails) => {
     const merged = draftFeature ? { ...draftFeature, ...updatedFeature } : updatedFeature;
@@ -574,22 +582,18 @@ export default function FeatureDetailsModal({
                 <button
                   type="button"
                   onClick={() => setGalleryIndex(0)}
-                  className="mt-4 block w-full overflow-hidden rounded-[24px] border border-[rgba(21,49,63,0.08)] bg-white text-left shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]"
+                  className="mt-4 block w-full min-w-0 overflow-hidden rounded-[24px] border border-[rgba(21,49,63,0.08)] bg-white text-left shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]"
                 >
                   <img
                     src={primaryImage.src}
                     alt={getStoredImageName(primaryImage.src)}
-                    className="feature-image-from-exif h-[360px] w-full object-cover"
+                    className="feature-image-from-exif block h-[360px] w-full max-w-full object-cover max-[700px]:h-auto max-[700px]:max-h-[48vh]"
                   />
                   {primaryImage.caption ? (
                     <div className="border-t border-[rgba(21,49,63,0.08)] px-4 py-3 text-[13px] text-[#526773]">
                       {primaryImage.caption}
                     </div>
-                  ) : (
-                    <div className="truncate border-t border-[rgba(21,49,63,0.08)] px-4 py-3 text-[13px] text-[#526773]">
-                      {getStoredImageName(primaryImage.src)}
-                    </div>
-                  )}
+                  ) : null}
                 </button>
               ) : (
                 <div className="mt-4 rounded-[24px] border border-dashed border-[rgba(21,49,63,0.16)] bg-white/50 px-5 py-10 text-center text-[14px] text-[#6a7d88]">
@@ -795,9 +799,6 @@ export default function FeatureDetailsModal({
                           className="feature-image-from-exif aspect-square w-full object-cover"
                         />
                       </button>
-                      <div className="truncate px-3 py-2 text-[11px] font-semibold text-[#6a7d88]">
-                        {getStoredImageName(image.src)}
-                      </div>
                       {canEdit ? (
                         <button
                           type="button"
@@ -902,7 +903,7 @@ export default function FeatureDetailsModal({
         </div>
       </div>
 
-      {galleryImage ? (
+      {galleryImage ? renderViewportOverlay(
         <div className="fixed inset-0 z-[5100] flex items-center justify-center bg-[rgba(5,12,18,0.82)] p-4 backdrop-blur-sm">
           <button
             type="button"
@@ -933,7 +934,7 @@ export default function FeatureDetailsModal({
 
             <div className="flex items-center justify-between gap-4 border-t border-white/10 px-5 py-4 text-white/80 max-[700px]:flex-col max-[700px]:items-start">
               <div className="text-sm">
-                {galleryImage.caption ?? getStoredImageName(galleryImage.src)}
+                {galleryImage.caption ?? draftFeature.title}
               </div>
               <div className="text-xs font-bold uppercase tracking-[0.08em] text-white/60">
                 {(currentGalleryPosition ?? 0) + 1} / {images.length}
@@ -954,7 +955,7 @@ export default function FeatureDetailsModal({
         </div>
       ) : null}
 
-      {pendingDeleteImageSrc ? (
+      {pendingDeleteImageSrc ? renderViewportOverlay(
         <div className="fixed inset-0 z-[5200] flex items-center justify-center bg-[rgba(7,18,24,0.58)] p-4 backdrop-blur-[2px]">
           <div className="w-full max-w-md rounded-[24px] border border-[rgba(255,255,255,0.18)] bg-[linear-gradient(180deg,#f8fbfc_0%,#eef4f7_100%)] p-6 shadow-[0_30px_90px_rgba(7,18,24,0.35)]">
             <h3 className="text-lg font-semibold text-[#15313f]">Delete image?</h3>
@@ -981,7 +982,7 @@ export default function FeatureDetailsModal({
         </div>
       ) : null}
 
-      {pendingDeleteFeature ? (
+      {pendingDeleteFeature ? renderViewportOverlay(
         <div className="fixed inset-0 z-[5200] flex items-center justify-center bg-[rgba(7,18,24,0.58)] p-4 backdrop-blur-[2px]">
           <div className="w-full max-w-md rounded-[24px] border border-[rgba(255,255,255,0.18)] bg-[linear-gradient(180deg,#f8fbfc_0%,#eef4f7_100%)] p-6 shadow-[0_30px_90px_rgba(7,18,24,0.35)]">
             <h3 className="text-lg font-semibold text-[#15313f]">Delete {draftFeature.kind}?</h3>
