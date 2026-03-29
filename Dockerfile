@@ -27,9 +27,17 @@ ENV NODE_ENV=production
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
 
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends postgresql-client \
+  && rm -rf /var/lib/apt/lists/*
+
+COPY docker-entrypoint.sh ./docker-entrypoint.sh
 COPY --from=builder /app/public ./public
+COPY --from=builder /app/supabase ./supabase
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 
+RUN chmod +x /app/docker-entrypoint.sh
+
 EXPOSE 3000
-CMD ["node", "server.js"]
+ENTRYPOINT ["/app/docker-entrypoint.sh"]
