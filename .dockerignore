@@ -7,7 +7,6 @@ npm-debug.log
 .env.local
 kml
 exports
-tools
 public/images
 public/tiles
 tsconfig.tsbuildinfo
