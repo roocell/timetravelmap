@@ -1,7 +1,7 @@
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 values (
-  'images',
-  'images',
+  'timetravelmap-images',
+  'timetravelmap-images',
   true,
   20971520,
   array['image/*']

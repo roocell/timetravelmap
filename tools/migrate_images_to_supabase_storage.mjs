@@ -8,7 +8,7 @@ import pkg from "pg";
 import { createClient } from "@supabase/supabase-js";
 
 const { Client } = pkg;
-const IMAGE_BUCKET = process.env.SUPABASE_IMAGE_BUCKET || "images";
+const IMAGE_BUCKET = process.env.SUPABASE_IMAGE_BUCKET || "timetravelmap-images";
 const PUBLIC_ROOT = path.join(process.cwd(), "public");
 
 function requireEnv(name) {

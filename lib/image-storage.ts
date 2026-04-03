@@ -3,7 +3,7 @@ import path from "node:path";
 import crypto from "node:crypto";
 import { getSupabaseAdminClient } from "./supabase/admin-client";
 
-export const IMAGE_BUCKET = process.env.SUPABASE_IMAGE_BUCKET || "images";
+export const IMAGE_BUCKET = process.env.SUPABASE_IMAGE_BUCKET || "timetravelmap-images";
 
 export function extensionFor(fileName: string, mimeType: string) {
   const ext = path.extname(fileName).toLowerCase();
