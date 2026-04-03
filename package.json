@@ -8,6 +8,7 @@
     "start": "next start --hostname 0.0.0.0 --port 3000",
     "lint": "next lint",
     "import:kml": "node tools/import-kml.mjs",
+    "images:migrate-storage": "node tools/migrate_images_to_supabase_storage.mjs",
     "prisma:generate": "prisma generate",
     "prisma:studio": "prisma studio",
     "prisma:db-pull": "prisma db pull"

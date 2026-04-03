@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { FindType, MetalCode, Prisma } from "@prisma/client";
+import { removeStoredImage } from "../../../../../lib/image-storage";
 import { NextRequest, NextResponse } from "next/server";
 import {
   AuthRequiredError,
@@ -412,6 +413,11 @@ async function removeImage(
     where: { id: image.id }
   });
 
+  const removedFromStorage = await removeStoredImage(image.storagePath);
+  if (removedFromStorage) {
+    return;
+  }
+
   const relativePath = image.storagePath.replace(/^\/+/, "");
   const filePath = path.join(PUBLIC_ROOT, relativePath);
   const resolvedPath = path.resolve(filePath);
@@ -578,6 +584,11 @@ async function cleanupOrphanedImage(
   await prisma.image.delete({
     where: { id: image.id }
   });
+
+  const removedFromStorage = await removeStoredImage(image.storagePath);
+  if (removedFromStorage) {
+    return;
+  }
 
   const relativePath = image.storagePath.replace(/^\/+/, "");
   const filePath = path.join(PUBLIC_ROOT, relativePath);

@@ -1,34 +1,10 @@
-import fs from "node:fs/promises";
-import path from "node:path";
-import crypto from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { NextRequest, NextResponse } from "next/server";
 import { requireStackUser, AuthRequiredError } from "../../../../lib/feature-auth";
+import { uploadImageToStorage } from "../../../../lib/image-storage";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
-
-const IMAGES_ROOT = path.join(process.cwd(), "public", "images");
-
-function extensionFor(fileName: string, mimeType: string) {
-  const ext = path.extname(fileName).toLowerCase();
-  if (ext) {
-    return ext;
-  }
-
-  if (mimeType === "image/heic") return ".heic";
-  if (mimeType === "image/heif") return ".heif";
-  if (mimeType === "image/avif") return ".avif";
-  if (mimeType === "image/png") return ".png";
-  if (mimeType === "image/jpg") return ".jpg";
-  if (mimeType === "image/jpeg") return ".jpg";
-  if (mimeType === "image/webp") return ".webp";
-  if (mimeType === "image/gif") return ".gif";
-  if (mimeType === "image/bmp") return ".bmp";
-  if (mimeType === "image/tiff") return ".tiff";
-  if (mimeType === "image/svg+xml") return ".svg";
-  return ".bin";
-}
 
 export async function POST(request: NextRequest) {
   const { prisma } = await import("../../../../lib/prisma");
@@ -47,15 +23,14 @@ export async function POST(request: NextRequest) {
     }
 
     const bytes = Buffer.from(await file.arrayBuffer());
-    const hash = crypto.createHash("sha256").update(bytes).digest("hex");
-    const fileName = `${hash}${extensionFor(file.name, file.type)}`;
-    const userDirectory = path.join(IMAGES_ROOT, user.id);
-    const filePath = path.join(userDirectory, fileName);
+    const uploaded = await uploadImageToStorage({
+      ownerId: user.id,
+      fileName: file.name,
+      mimeType: file.type,
+      bytes
+    });
 
-    await fs.mkdir(userDirectory, { recursive: true });
-    await fs.writeFile(filePath, bytes);
-
-    const src = `/images/${user.id}/${fileName}`;
+    const src = uploaded.publicUrl;
 
     await prisma.$executeRaw(
       Prisma.sql`
@@ -74,7 +49,7 @@ export async function POST(request: NextRequest) {
           ${file.name || null},
           ${file.type || null},
           ${BigInt(bytes.byteLength)},
-          ${hash},
+          ${uploaded.hash},
           ${"stack-upload"}
         )
         on conflict (storage_path) do update
