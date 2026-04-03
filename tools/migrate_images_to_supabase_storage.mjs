@@ -4,10 +4,8 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
 import crypto from "node:crypto";
-import pkg from "pg";
-import { createClient } from "@supabase/supabase-js";
+import { spawn } from "node:child_process";
 
-const { Client } = pkg;
 const IMAGE_BUCKET = process.env.SUPABASE_IMAGE_BUCKET || "timetravelmap-images";
 const PUBLIC_ROOT = path.join(process.cwd(), "public");
 
@@ -34,8 +32,69 @@ function extensionFor(fileName, mimeType) {
   return ".bin";
 }
 
-function getPublicUrl(supabase, objectPath) {
-  return supabase.storage.from(IMAGE_BUCKET).getPublicUrl(objectPath).data.publicUrl;
+function shellQuote(value) {
+  return `'${String(value).replace(/'/g, `'"'"'`)}'`;
+}
+
+function psql(databaseUrl, sql) {
+  return new Promise((resolve, reject) => {
+    const child = spawn("psql", [databaseUrl, "-v", "ON_ERROR_STOP=1", "-AtF", "\t", "-c", sql], {
+      stdio: ["ignore", "pipe", "pipe"]
+    });
+
+    let stdout = "";
+    let stderr = "";
+
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk.toString();
+    });
+
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk.toString();
+    });
+
+    child.on("error", reject);
+    child.on("close", (code) => {
+      if (code !== 0) {
+        reject(new Error(stderr || `psql exited with code ${code}`));
+        return;
+      }
+      resolve(stdout.trim());
+    });
+  });
+}
+
+function parseRows(output) {
+  if (!output) return [];
+  return output.split("\n").filter(Boolean).map((line) => {
+    const [id, owner_id, storage_path, mime_type] = line.split("\t");
+    return { id, owner_id, storage_path, mime_type };
+  });
+}
+
+async function uploadToSupabase({ supabaseUrl, serviceRoleKey, objectPath, mimeType, bytes }) {
+  const base = supabaseUrl.replace(/\/$/, "");
+  const url = `${base}/storage/v1/object/${IMAGE_BUCKET}/${objectPath}`;
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${serviceRoleKey}`,
+      apikey: serviceRoleKey,
+      "Content-Type": mimeType || "application/octet-stream",
+      "x-upsert": "true"
+    },
+    body: bytes
+  });
+
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    throw new Error(`Storage upload failed (${response.status}): ${text || response.statusText}`);
+  }
+}
+
+function getPublicUrl(supabaseUrl, objectPath) {
+  return `${supabaseUrl.replace(/\/$/, "")}/storage/v1/object/public/${IMAGE_BUCKET}/${objectPath}`;
 }
 
 async function main() {
@@ -43,18 +102,16 @@ async function main() {
   const supabaseUrl = requireEnv("NEXT_PUBLIC_SUPABASE_URL");
   const serviceRoleKey = requireEnv("SUPABASE_SERVICE_ROLE_KEY");
 
-  const client = new Client({ connectionString: databaseUrl });
-  const supabase = createClient(supabaseUrl, serviceRoleKey, {
-    auth: { persistSession: false, autoRefreshToken: false }
-  });
-
-  await client.connect();
-
-  const { rows } = await client.query(`
-    select id, owner_id, storage_path, mime_type, alt_text
-    from timetravelmap.images
-    order by created_at asc
-  `);
+  const rows = parseRows(
+    await psql(
+      databaseUrl,
+      `
+        select id, coalesce(owner_id, ''), storage_path, coalesce(mime_type, '')
+        from timetravelmap.images
+        order by created_at asc
+      `
+    )
+  );
 
   let migrated = 0;
   let skipped = 0;
@@ -95,26 +152,24 @@ async function main() {
       const hash = crypto.createHash("sha256").update(bytes).digest("hex");
       const objectPath = `${ownerId}/${hash}${extensionFor(storagePath, row.mime_type || "")}`;
 
-      const { error: uploadError } = await supabase.storage.from(IMAGE_BUCKET).upload(objectPath, bytes, {
-        contentType: row.mime_type || "application/octet-stream",
-        upsert: true
+      await uploadToSupabase({
+        supabaseUrl,
+        serviceRoleKey,
+        objectPath,
+        mimeType: row.mime_type || "application/octet-stream",
+        bytes
       });
 
-      if (uploadError) {
-        throw uploadError;
-      }
-
-      const publicUrl = getPublicUrl(supabase, objectPath);
-
-      await client.query(
+      const publicUrl = getPublicUrl(supabaseUrl, objectPath);
+      await psql(
+        databaseUrl,
         `
           update timetravelmap.images
-          set storage_path = $1,
-              checksum_sha256 = coalesce(checksum_sha256, $2),
-              byte_size = coalesce(byte_size, $3)
-          where id = $4
-        `,
-        [publicUrl, hash, String(bytes.byteLength), row.id]
+          set storage_path = ${shellQuote(publicUrl)},
+              checksum_sha256 = coalesce(checksum_sha256, ${shellQuote(hash)}),
+              byte_size = coalesce(byte_size, ${shellQuote(String(bytes.byteLength))})
+          where id = ${shellQuote(row.id)}::uuid
+        `
       );
 
       migrated += 1;
@@ -124,8 +179,6 @@ async function main() {
       console.error(`Failed migrating ${row.id}:`, error);
     }
   }
-
-  await client.end();
 
   console.log("\nMigration complete");
   console.log(JSON.stringify({ bucket: IMAGE_BUCKET, migrated, skipped, missing, failed }, null, 2));
