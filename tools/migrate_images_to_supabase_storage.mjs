@@ -36,6 +36,12 @@ function shellQuote(value) {
   return `'${String(value).replace(/'/g, `'"'"'`)}'`;
 }
 
+function normalizeDatabaseUrl(rawUrl) {
+  const url = new URL(rawUrl);
+  url.searchParams.delete("schema");
+  return url.toString();
+}
+
 function psql(databaseUrl, sql) {
   return new Promise((resolve, reject) => {
     const child = spawn("psql", [databaseUrl, "-v", "ON_ERROR_STOP=1", "-AtF", "\t", "-c", sql], {
@@ -98,7 +104,7 @@ function getPublicUrl(supabaseUrl, objectPath) {
 }
 
 async function main() {
-  const databaseUrl = requireEnv("DATABASE_URL");
+  const databaseUrl = normalizeDatabaseUrl(requireEnv("DATABASE_URL"));
   const supabaseUrl = requireEnv("NEXT_PUBLIC_SUPABASE_URL");
   const serviceRoleKey = requireEnv("SUPABASE_SERVICE_ROLE_KEY");
 
