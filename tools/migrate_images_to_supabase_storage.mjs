@@ -81,15 +81,19 @@ function parseRows(output) {
 async function uploadToSupabase({ supabaseUrl, serviceRoleKey, objectPath, mimeType, bytes }) {
   const base = supabaseUrl.replace(/\/$/, "");
   const url = `${base}/storage/v1/object/${IMAGE_BUCKET}/${objectPath}`;
+  const headers = {
+    apikey: serviceRoleKey,
+    "Content-Type": mimeType || "application/octet-stream",
+    "x-upsert": "true"
+  };
+
+  if (!serviceRoleKey.startsWith("sb_secret_")) {
+    headers.Authorization = `Bearer ${serviceRoleKey}`;
+  }
 
   const response = await fetch(url, {
     method: "POST",
-    headers: {
-      Authorization: `Bearer ${serviceRoleKey}`,
-      apikey: serviceRoleKey,
-      "Content-Type": mimeType || "application/octet-stream",
-      "x-upsert": "true"
-    },
+    headers,
     body: bytes
   });
 
