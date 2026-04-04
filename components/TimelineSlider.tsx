@@ -9,6 +9,7 @@ type TimelineSliderProps = {
   value: number;
   onChange: (value: number) => void;
   reversed?: boolean;
+  disabled?: boolean;
 };
 
 export default function TimelineSlider({
@@ -16,7 +17,8 @@ export default function TimelineSlider({
   max,
   value,
   onChange,
-  reversed = false
+  reversed = false,
+  disabled = false
 }: TimelineSliderProps) {
   const sliderRef = useRef<HTMLInputElement | null>(null);
   const orderedLabels = reversed ? [...labels].reverse() : labels;
@@ -30,7 +32,7 @@ export default function TimelineSlider({
           <span>Timeline</span>
         </div>
         <div className="text-[12px] font-bold uppercase tracking-[0.08em] text-[#6a7d88] max-[700px]:hidden">
-          Drag to fade between years
+          {disabled ? "Locked for restricted users" : "Drag to fade between years"}
         </div>
       </div>
 
@@ -39,14 +41,15 @@ export default function TimelineSlider({
           <div className="w-full">
             <input
               ref={sliderRef}
-              className="h-[10px] w-full appearance-none rounded-md bg-[rgba(21,49,63,0.16)] outline-none [&::-moz-range-thumb]:h-[18px] [&::-moz-range-thumb]:w-[18px] [&::-moz-range-thumb]:cursor-pointer [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-white [&::-moz-range-thumb]:bg-[#15313f] [&::-moz-range-thumb]:shadow-[0_4px_12px_rgba(21,49,63,0.22)] [&::-moz-range-track]:h-[10px] [&::-moz-range-track]:rounded-md [&::-moz-range-track]:bg-[rgba(21,49,63,0.16)] [&::-webkit-slider-thumb]:h-[18px] [&::-webkit-slider-thumb]:w-[18px] [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-white [&::-webkit-slider-thumb]:bg-[#15313f] [&::-webkit-slider-thumb]:shadow-[0_4px_12px_rgba(21,49,63,0.22)]"
+              className={`h-[10px] w-full appearance-none rounded-md bg-[rgba(21,49,63,0.16)] outline-none [&::-moz-range-thumb]:h-[18px] [&::-moz-range-thumb]:w-[18px] [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-white [&::-moz-range-thumb]:bg-[#15313f] [&::-moz-range-thumb]:shadow-[0_4px_12px_rgba(21,49,63,0.22)] [&::-moz-range-track]:h-[10px] [&::-moz-range-track]:rounded-md [&::-moz-range-track]:bg-[rgba(21,49,63,0.16)] [&::-webkit-slider-thumb]:h-[18px] [&::-webkit-slider-thumb]:w-[18px] [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-white [&::-webkit-slider-thumb]:bg-[#15313f] [&::-webkit-slider-thumb]:shadow-[0_4px_12px_rgba(21,49,63,0.22)] ${disabled ? "cursor-not-allowed opacity-60 [&::-moz-range-thumb]:cursor-not-allowed [&::-webkit-slider-thumb]:cursor-not-allowed" : "[&::-moz-range-thumb]:cursor-pointer [&::-webkit-slider-thumb]:cursor-pointer"}`}
               type="range"
               min="0"
               max={max}
               step="any"
               value={value}
+              disabled={disabled}
               onInput={(event) => onChange(Number.parseFloat(event.currentTarget.value))}
-              aria-label="Map timeline"
+              aria-label={disabled ? "Map timeline locked" : "Map timeline"}
             />
           </div>
 

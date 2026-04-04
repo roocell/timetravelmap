@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { NextRequest, NextResponse } from "next/server";
 import {
+  AccessDeniedError,
   AuthRequiredError,
   ensureImageOwnedByUser,
   FeatureOwnershipError,
@@ -327,6 +328,9 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     if (error instanceof AuthRequiredError) {
       return NextResponse.json({ error: error.message }, { status: 401 });
+    }
+    if (error instanceof AccessDeniedError) {
+      return NextResponse.json({ error: error.message }, { status: 403 });
     }
 
     if (error instanceof FeatureOwnershipError) {

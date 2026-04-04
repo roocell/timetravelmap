@@ -4,6 +4,7 @@ import { FindType, MetalCode, Prisma } from "@prisma/client";
 import { removeStoredImage } from "../../../../../lib/image-storage";
 import { NextRequest, NextResponse } from "next/server";
 import {
+  AccessDeniedError,
   AuthRequiredError,
   ensureFeatureOwner,
   ensureImageOwnedByUser,
@@ -678,6 +679,9 @@ export async function PATCH(
     if (error instanceof AuthRequiredError) {
       return NextResponse.json({ error: error.message }, { status: 401 });
     }
+    if (error instanceof AccessDeniedError) {
+      return NextResponse.json({ error: error.message }, { status: 403 });
+    }
 
     if (error instanceof FeatureOwnershipError) {
       return NextResponse.json({ error: error.message }, { status: 403 });
@@ -785,6 +789,9 @@ export async function DELETE(
   } catch (error) {
     if (error instanceof AuthRequiredError) {
       return NextResponse.json({ error: error.message }, { status: 401 });
+    }
+    if (error instanceof AccessDeniedError) {
+      return NextResponse.json({ error: error.message }, { status: 403 });
     }
 
     if (error instanceof FeatureOwnershipError) {

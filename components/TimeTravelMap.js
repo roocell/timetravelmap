@@ -461,9 +461,10 @@ export default function TimeTravelMap({
   onToggleYear = () => {},
   onToggleProspects = () => {}
 }) {
-  const user = useUser();
+  const user = useUser({ includeRestricted: true });
   const stackApp = useStackApp();
   const currentUserId = user?.id ?? null;
+  const timelineLocked = !user || user.isRestricted === true;
   const mapElementRef = useRef(null);
   const layerRefs = useRef([]);
   const datasetLayerRefs = useRef(new Map());
@@ -1949,6 +1950,7 @@ export default function TimeTravelMap({
           max={layerDefinitions.length - 1}
           value={sliderValue}
           onChange={handleSliderChange}
+          disabled={timelineLocked}
           reversed
         />
       </Card>

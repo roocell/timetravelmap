@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getStackUser } from "../../../stack";
+import { canAccessApp } from "../../../lib/access";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -59,6 +60,9 @@ export async function GET(request: Request) {
     const user = await getStackUser(request);
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    if (!canAccessApp(user)) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     const { prisma } = await import("../../../lib/prisma");

@@ -1,6 +1,10 @@
 import { Prisma } from "@prisma/client";
 import { NextRequest, NextResponse } from "next/server";
-import { requireStackUser, AuthRequiredError } from "../../../../lib/feature-auth";
+import {
+  requireStackUser,
+  AccessDeniedError,
+  AuthRequiredError
+} from "../../../../lib/feature-auth";
 import { uploadImageToStorage } from "../../../../lib/image-storage";
 
 export const dynamic = "force-dynamic";
@@ -70,6 +74,9 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     if (error instanceof AuthRequiredError) {
       return NextResponse.json({ error: error.message }, { status: 401 });
+    }
+    if (error instanceof AccessDeniedError) {
+      return NextResponse.json({ error: error.message }, { status: 403 });
     }
 
     return NextResponse.json(

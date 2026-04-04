@@ -1,10 +1,12 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 import type { NextRequest } from "next/server";
+import { canAccessApp } from "./access";
 import { getStackUser } from "../stack";
 
 export type OwnedFeatureKind = "event" | "find" | "prospect";
 
 export class AuthRequiredError extends Error {}
+export class AccessDeniedError extends Error {}
 export class FeatureOwnershipError extends Error {}
 
 export async function requireStackUser(request?: NextRequest | Request) {
@@ -12,6 +14,10 @@ export async function requireStackUser(request?: NextRequest | Request) {
 
   if (!user) {
     throw new AuthRequiredError("You must be signed in to do that");
+  }
+
+  if (!canAccessApp(user)) {
+    throw new AccessDeniedError("You do not have access to this app");
   }
 
   return user;

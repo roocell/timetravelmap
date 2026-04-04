@@ -102,7 +102,7 @@ function OAuthCallbackScreen() {
 
 function AccountSettingsScreen() {
   const stackApp = useStackApp();
-  const user = useUser();
+  const user = useUser({ includeRestricted: true });
 
   return (
     <Shell
@@ -130,7 +130,7 @@ function AccountSettingsScreen() {
 
 function SignOutScreen() {
   const stackApp = useStackApp();
-  const user = useUser();
+  const user = useUser({ includeRestricted: true });
 
   useEffect(() => {
     let active = true;

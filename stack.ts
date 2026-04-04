@@ -33,8 +33,8 @@ export const stackServerApp = new StackServerApp({
 
 export async function getStackUser(request?: NextRequest | Request) {
   if (request) {
-    return stackServerApp.getUser({ tokenStore: request });
+    return stackServerApp.getUser({ tokenStore: request, includeRestricted: true });
   }
 
-  return stackServerApp.getUser();
+  return stackServerApp.getUser({ includeRestricted: true });
 }
