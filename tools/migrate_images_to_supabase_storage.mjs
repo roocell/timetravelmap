@@ -5,6 +5,7 @@ import path from "node:path";
 import process from "node:process";
 import crypto from "node:crypto";
 import { spawn } from "node:child_process";
+import { createClient } from "@supabase/supabase-js";
 
 const IMAGE_BUCKET = process.env.SUPABASE_IMAGE_BUCKET || "timetravelmap-images";
 const PUBLIC_ROOT = path.join(process.cwd(), "public");
@@ -78,39 +79,24 @@ function parseRows(output) {
   });
 }
 
-async function uploadToSupabase({ supabaseUrl, serviceRoleKey, objectPath, mimeType, bytes }) {
-  const base = supabaseUrl.replace(/\/$/, "");
-  const url = `${base}/storage/v1/object/${IMAGE_BUCKET}/${objectPath}`;
-  const headers = {
-    apikey: serviceRoleKey,
-    "Content-Type": mimeType || "application/octet-stream",
-    "x-upsert": "true"
-  };
-
-  if (!serviceRoleKey.startsWith("sb_secret_")) {
-    headers.Authorization = `Bearer ${serviceRoleKey}`;
-  }
-
-  const response = await fetch(url, {
-    method: "POST",
-    headers,
-    body: bytes
+function getSupabaseAdminClient(supabaseUrl, serviceRoleKey) {
+  return createClient(supabaseUrl, serviceRoleKey, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false
+    }
   });
-
-  if (!response.ok) {
-    const text = await response.text().catch(() => "");
-    throw new Error(`Storage upload failed (${response.status}): ${text || response.statusText}`);
-  }
 }
 
-function getPublicUrl(supabaseUrl, objectPath) {
-  return `${supabaseUrl.replace(/\/$/, "")}/storage/v1/object/public/${IMAGE_BUCKET}/${objectPath}`;
+function getPublicUrl(supabase, objectPath) {
+  return supabase.storage.from(IMAGE_BUCKET).getPublicUrl(objectPath).data.publicUrl;
 }
 
 async function main() {
   const databaseUrl = normalizeDatabaseUrl(requireEnv("DATABASE_URL"));
   const supabaseUrl = requireEnv("NEXT_PUBLIC_SUPABASE_URL");
   const serviceRoleKey = requireEnv("SUPABASE_SERVICE_ROLE_KEY");
+  const supabase = getSupabaseAdminClient(supabaseUrl, serviceRoleKey);
 
   const rows = parseRows(
     await psql(
@@ -162,15 +148,16 @@ async function main() {
       const hash = crypto.createHash("sha256").update(bytes).digest("hex");
       const objectPath = `${ownerId}/${hash}${extensionFor(storagePath, row.mime_type || "")}`;
 
-      await uploadToSupabase({
-        supabaseUrl,
-        serviceRoleKey,
-        objectPath,
-        mimeType: row.mime_type || "application/octet-stream",
-        bytes
+      const { error: uploadError } = await supabase.storage.from(IMAGE_BUCKET).upload(objectPath, bytes, {
+        contentType: row.mime_type || "application/octet-stream",
+        upsert: true
       });
 
-      const publicUrl = getPublicUrl(supabaseUrl, objectPath);
+      if (uploadError) {
+        throw uploadError;
+      }
+
+      const publicUrl = getPublicUrl(supabase, objectPath);
       await psql(
         databaseUrl,
         `

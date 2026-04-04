@@ -35,6 +35,7 @@ COPY docker-entrypoint.sh ./docker-entrypoint.sh
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/supabase ./supabase
 COPY --from=builder /app/tools ./tools
+COPY --from=deps /app/node_modules ./node_modules
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 
