@@ -38,6 +38,7 @@ COPY --from=builder /app/tools ./tools
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 
+# Force image rebuild when deployment config changes.
 RUN chmod +x /app/docker-entrypoint.sh
 
 EXPOSE 3000
