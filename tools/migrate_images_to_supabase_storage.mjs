@@ -33,6 +33,26 @@ function extensionFor(fileName, mimeType) {
   return ".bin";
 }
 
+function mimeTypeFor(filePath, storedMimeType) {
+  const normalized = String(storedMimeType || "").trim().toLowerCase();
+  if (normalized.startsWith("image/")) {
+    return normalized;
+  }
+
+  const ext = path.extname(filePath).toLowerCase();
+  if (ext === ".jpg" || ext === ".jpeg") return "image/jpeg";
+  if (ext === ".png") return "image/png";
+  if (ext === ".webp") return "image/webp";
+  if (ext === ".gif") return "image/gif";
+  if (ext === ".bmp") return "image/bmp";
+  if (ext === ".tif" || ext === ".tiff") return "image/tiff";
+  if (ext === ".svg") return "image/svg+xml";
+  if (ext === ".heic") return "image/heic";
+  if (ext === ".heif") return "image/heif";
+  if (ext === ".avif") return "image/avif";
+  return "application/octet-stream";
+}
+
 function shellQuote(value) {
   return `'${String(value).replace(/'/g, `'"'"'`)}'`;
 }
@@ -145,11 +165,12 @@ async function main() {
 
     try {
       const ownerId = row.owner_id || "unowned";
+      const mimeType = mimeTypeFor(storagePath, row.mime_type || "");
       const hash = crypto.createHash("sha256").update(bytes).digest("hex");
-      const objectPath = `${ownerId}/${hash}${extensionFor(storagePath, row.mime_type || "")}`;
+      const objectPath = `${ownerId}/${hash}${extensionFor(storagePath, mimeType)}`;
 
       const { error: uploadError } = await supabase.storage.from(IMAGE_BUCKET).upload(objectPath, bytes, {
-        contentType: row.mime_type || "application/octet-stream",
+        contentType: mimeType,
         upsert: true
       });
 
