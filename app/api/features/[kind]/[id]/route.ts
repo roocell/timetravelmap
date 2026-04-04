@@ -433,6 +433,129 @@ async function removeImage(
   });
 }
 
+async function setPrimaryImage(
+  prisma: Awaited<typeof import("../../../../../lib/prisma")>["prisma"],
+  kind: FeatureKind,
+  id: string,
+  src: string
+) {
+  const normalizedSrc = toNullableString(src);
+  if (!normalizedSrc) {
+    throw new Error("Image path is required");
+  }
+
+  if (kind === "event") {
+    const images = await prisma.eventImage.findMany({
+      where: { eventId: id },
+      orderBy: [{ sortOrder: "asc" }, { image: { createdAt: "asc" } }],
+      select: {
+        imageId: true,
+        image: {
+          select: {
+            storagePath: true
+          }
+        }
+      }
+    });
+
+    const primaryIndex = images.findIndex((entry) => entry.image.storagePath === normalizedSrc);
+    if (primaryIndex === -1) {
+      throw new Error("Image is not attached to this feature");
+    }
+
+    const reordered = [images[primaryIndex], ...images.filter((_, index) => index !== primaryIndex)];
+    await prisma.$transaction(
+      reordered.map((entry, index) =>
+        prisma.eventImage.update({
+          where: {
+            eventId_imageId: {
+              eventId: id,
+              imageId: entry.imageId
+            }
+          },
+          data: {
+            sortOrder: index
+          }
+        })
+      )
+    );
+    return;
+  }
+
+  if (kind === "find") {
+    const images = await prisma.findImage.findMany({
+      where: { findId: id },
+      orderBy: [{ sortOrder: "asc" }, { image: { createdAt: "asc" } }],
+      select: {
+        imageId: true,
+        image: {
+          select: {
+            storagePath: true
+          }
+        }
+      }
+    });
+
+    const primaryIndex = images.findIndex((entry) => entry.image.storagePath === normalizedSrc);
+    if (primaryIndex === -1) {
+      throw new Error("Image is not attached to this feature");
+    }
+
+    const reordered = [images[primaryIndex], ...images.filter((_, index) => index !== primaryIndex)];
+    await prisma.$transaction(
+      reordered.map((entry, index) =>
+        prisma.findImage.update({
+          where: {
+            findId_imageId: {
+              findId: id,
+              imageId: entry.imageId
+            }
+          },
+          data: {
+            sortOrder: index
+          }
+        })
+      )
+    );
+    return;
+  }
+
+  const images = await prisma.prospectImage.findMany({
+    where: { prospectId: id },
+    orderBy: [{ sortOrder: "asc" }, { image: { createdAt: "asc" } }],
+    select: {
+      imageId: true,
+      image: {
+        select: {
+          storagePath: true
+        }
+      }
+    }
+  });
+
+  const primaryIndex = images.findIndex((entry) => entry.image.storagePath === normalizedSrc);
+  if (primaryIndex === -1) {
+    throw new Error("Image is not attached to this feature");
+  }
+
+  const reordered = [images[primaryIndex], ...images.filter((_, index) => index !== primaryIndex)];
+  await prisma.$transaction(
+    reordered.map((entry, index) =>
+      prisma.prospectImage.update({
+        where: {
+          prospectId_imageId: {
+            prospectId: id,
+            imageId: entry.imageId
+          }
+        },
+        data: {
+          sortOrder: index
+        }
+      })
+    )
+  );
+}
+
 export async function PATCH(
   request: NextRequest,
   context: { params: Promise<{ kind: string; id: string }> }
@@ -539,6 +662,10 @@ export async function PATCH(
 
     if (body.removeImageSrc) {
       await removeImage(prisma, rawKind, id, String(body.removeImageSrc));
+    }
+
+    if (body.setPrimaryImageSrc) {
+      await setPrimaryImage(prisma, rawKind, id, String(body.setPrimaryImageSrc));
     }
 
     const feature = await readFeature(prisma, rawKind, id);

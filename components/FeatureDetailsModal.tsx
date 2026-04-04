@@ -10,6 +10,7 @@ import {
   MapPinned,
   Radar,
   Save,
+  Star,
   Trash2,
   X
 } from "lucide-react";
@@ -508,6 +509,16 @@ export default function FeatureDetailsModal({
     }
   };
 
+  const handleSetPrimaryImage = async (src: string) => {
+    try {
+      await patchFeature({
+        setPrimaryImageSrc: src
+      });
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : "Failed to set primary image");
+    }
+  };
+
   const handleDeleteFeature = async () => {
     setFeatureDeleting(true);
     setError(null);
@@ -849,7 +860,11 @@ export default function FeatureDetailsModal({
                   {images.map((image, index) => (
                     <div
                       key={`${image.src}-${index}`}
-                      className="relative overflow-hidden rounded-2xl border border-[rgba(21,49,63,0.08)] bg-white"
+                      className={`relative overflow-hidden rounded-2xl border bg-white ${
+                        index === 0
+                          ? "border-[#15313f] shadow-[0_0_0_2px_rgba(21,49,63,0.12)]"
+                          : "border-[rgba(21,49,63,0.08)]"
+                      }`}
                     >
                       <button
                         type="button"
@@ -862,6 +877,35 @@ export default function FeatureDetailsModal({
                           className="feature-image-from-exif aspect-square w-full object-cover"
                         />
                       </button>
+                      {canEdit ? (
+                        <button
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            void handleSetPrimaryImage(image.src);
+                          }}
+                          disabled={index === 0}
+                          className={`absolute left-2 top-2 inline-flex h-8 w-8 items-center justify-center rounded-full text-white ${
+                            index === 0
+                              ? "bg-[#15313f]"
+                              : "bg-[rgba(7,18,24,0.72)] disabled:cursor-not-allowed disabled:opacity-85"
+                          }`}
+                          aria-label={index === 0 ? "Primary photo" : "Set as primary photo"}
+                        >
+                          <Star
+                            size={14}
+                            strokeWidth={2.2}
+                            fill={index === 0 ? "currentColor" : "none"}
+                          />
+                        </button>
+                      ) : index === 0 ? (
+                        <div
+                          className="absolute left-2 top-2 inline-flex h-8 w-8 items-center justify-center rounded-full bg-[#15313f] text-white"
+                          aria-label="Primary photo"
+                        >
+                          <Star size={14} strokeWidth={2.2} fill="currentColor" />
+                        </div>
+                      ) : null}
                       {canEdit ? (
                         <button
                           type="button"

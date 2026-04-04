@@ -189,6 +189,41 @@ function getYearFromDateLike(value) {
   return Number.isFinite(year) ? year : null;
 }
 
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function bindFeatureHoverPreview(layer, feature) {
+  const primaryImage = Array.isArray(feature?.images) ? feature.images[0] : null;
+  const title = escapeHtml(feature?.title ?? "");
+  const caption = escapeHtml(primaryImage?.caption ?? "");
+
+  const previewHtml = primaryImage?.src
+    ? `
+      <div style="width:200px;overflow:hidden;border-radius:16px;background:#ffffff;box-shadow:0 14px 36px rgba(7,18,24,0.18);">
+        <img src="${escapeHtml(primaryImage.src)}" alt="${title}" style="display:block;height:132px;width:100%;object-fit:cover;" />
+        <div style="padding:10px 12px;">
+          <div style="font-size:13px;font-weight:800;line-height:1.3;color:#15313f;">${title}</div>
+          ${caption ? `<div style="margin-top:4px;font-size:11px;line-height:1.4;color:#526773;">${caption}</div>` : ""}
+        </div>
+      </div>
+    `
+    : `<div style="border-radius:14px;background:#ffffff;padding:10px 12px;font-size:13px;font-weight:800;color:#15313f;box-shadow:0 14px 36px rgba(7,18,24,0.18);">${title}</div>`;
+
+  layer.bindTooltip(previewHtml, {
+    direction: "top",
+    offset: [0, -12],
+    opacity: 1,
+    sticky: true,
+    className: "ttm-feature-hover-card"
+  });
+}
+
 function createFindMarker(find) {
   const shortLabel = getFindShortLabel(find);
 
@@ -321,6 +356,8 @@ function createEventFeatureLayer(event, openFeature) {
   });
 
   geoJsonLayer.eachLayer((layer) => {
+    bindFeatureHoverPreview(layer, event);
+
     layer.on("click", (clickEvent) => {
       L.DomEvent.stopPropagation(clickEvent);
       openFeature({
@@ -345,6 +382,7 @@ function createEventFeatureLayer(event, openFeature) {
 
 function createFindFeatureLayer(find, openFeature) {
   const marker = createFindMarker(find);
+  bindFeatureHoverPreview(marker, find);
 
   marker.on("click", (clickEvent) => {
     L.DomEvent.stopPropagation(clickEvent);
@@ -1279,6 +1317,7 @@ export default function TimeTravelMap({
       const marker = L.circleMarker([prospect.latitude, prospect.longitude], {
         ...getProspectMarkerStyle(prospect)
       });
+      bindFeatureHoverPreview(marker, prospect);
 
       marker.on("click", (clickEvent) => {
         L.DomEvent.stopPropagation(clickEvent);
@@ -1354,6 +1393,7 @@ export default function TimeTravelMap({
     const marker = L.circleMarker([prospect.latitude, prospect.longitude], {
       ...getProspectMarkerStyle(prospect)
     });
+    bindFeatureHoverPreview(marker, prospect);
 
     marker.on("click", (clickEvent) => {
       L.DomEvent.stopPropagation(clickEvent);

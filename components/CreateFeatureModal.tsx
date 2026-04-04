@@ -7,6 +7,7 @@ import {
   MapPinned,
   Radar,
   Save,
+  Star,
   X
 } from "lucide-react";
 import {
@@ -245,6 +246,20 @@ export default function CreateFeatureModal({
     }));
   };
 
+  const setPrimaryImage = (src: string) => {
+    setValues((current) => {
+      const primaryImage = current.images.find((image) => image.src === src);
+      if (!primaryImage) {
+        return current;
+      }
+
+      return {
+        ...current,
+        images: [primaryImage, ...current.images.filter((image) => image.src !== src)]
+      };
+    });
+  };
+
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setSaving(true);
@@ -387,11 +402,18 @@ export default function CreateFeatureModal({
 
                 {values.images.length ? (
                   <div className="grid min-w-0 grid-cols-2 gap-3 max-[520px]:grid-cols-1">
-                    {values.images.map((image) => (
-                      <div
-                        key={image.src}
-                        className="min-w-0 overflow-hidden rounded-[20px] border border-[rgba(21,49,63,0.08)] bg-white shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]"
-                      >
+                    {values.images.map((image) => {
+                      const isPrimary = values.images[0]?.src === image.src;
+
+                      return (
+                        <div
+                          key={image.src}
+                          className={`relative min-w-0 overflow-hidden rounded-[20px] border bg-white shadow-[inset_0_1px_0_rgba(255,255,255,0.7)] ${
+                            isPrimary
+                              ? "border-[#15313f] shadow-[0_0_0_2px_rgba(21,49,63,0.12)]"
+                              : "border-[rgba(21,49,63,0.08)]"
+                          }`}
+                        >
                         <div className="aspect-square w-full overflow-hidden bg-[rgba(21,49,63,0.04)]">
                           <img
                             src={image.src}
@@ -399,6 +421,23 @@ export default function CreateFeatureModal({
                             className="feature-image-from-exif block h-full w-full max-w-full object-cover"
                           />
                         </div>
+                        <button
+                          type="button"
+                          onClick={() => setPrimaryImage(image.src)}
+                          disabled={isPrimary}
+                          className={`absolute left-2 top-2 inline-flex h-8 w-8 items-center justify-center rounded-full text-white ${
+                            isPrimary
+                              ? "bg-[#15313f]"
+                              : "bg-[rgba(7,18,24,0.72)]"
+                          }`}
+                          aria-label={isPrimary ? "Primary photo" : "Set as primary photo"}
+                        >
+                          <Star
+                            size={14}
+                            strokeWidth={2.2}
+                            fill={isPrimary ? "currentColor" : "none"}
+                          />
+                        </button>
                         <div className="grid min-w-0 gap-2 p-2">
                           <div className="truncate text-[11px] font-semibold text-[#6a7d88]">
                             {getStoredImageName(image.src)}
@@ -411,8 +450,9 @@ export default function CreateFeatureModal({
                             Remove
                           </button>
                         </div>
-                      </div>
-                    ))}
+                        </div>
+                      );
+                    })}
                   </div>
                 ) : null}
               </div>

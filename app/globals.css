@@ -51,4 +51,15 @@
   .stack-scope[role="menu"] * {
     cursor: pointer !important;
   }
+
+  .ttm-feature-hover-card {
+    background: transparent !important;
+    border: 0 !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+  }
+
+  .ttm-feature-hover-card::before {
+    display: none !important;
+  }
 }
