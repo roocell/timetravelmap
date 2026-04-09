@@ -1059,8 +1059,9 @@ export default function TimeTravelMap({
       const { lat: clickLat, lng: clickLng } = event.latlng;
       markerRef.current = L.marker([clickLat, clickLng]).addTo(map);
 
-      const shareZoom = Math.min(map.getZoom(), MAX_NATIVE_ZOOM);
-      const ttmUrl = `${window.location.origin}${window.location.pathname}?lat=${clickLat}&lng=${clickLng}&z=${shareZoom}`;
+      const shareZoom = map.getZoom();
+      const shareLayerIndex = sliderValueRef.current;
+      const ttmUrl = `${window.location.origin}${window.location.pathname}?lat=${clickLat}&lng=${clickLng}&z=${shareZoom}&l=${shareLayerIndex}`;
       const popupHtml = [
         `${clickLat},<br>${clickLng}`,
         `<a href="${ttmUrl}" target="_blank" rel="noreferrer">TTM Link</a>`,
