@@ -1060,8 +1060,10 @@ export default function TimeTravelMap({
       markerRef.current = L.marker([clickLat, clickLng]).addTo(map);
 
       const shareZoom = Math.min(map.getZoom(), MAX_NATIVE_ZOOM);
+      const ttmUrl = `${window.location.origin}${window.location.pathname}?lat=${clickLat}&lng=${clickLng}&z=${shareZoom}`;
       const popupHtml = [
         `${clickLat},<br>${clickLng}`,
+        `<a href="${ttmUrl}" target="_blank" rel="noreferrer">TTM Link</a>`,
         `<a href="https://www.google.com/maps/place/${clickLat},${clickLng}" target="_blank" rel="noreferrer">Google Maps Link</a>`
       ].join("<br>");
 
