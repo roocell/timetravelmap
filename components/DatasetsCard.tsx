@@ -81,31 +81,50 @@ export default function DatasetsCard({
   const activeButtonClass =
     "border-[rgba(11,34,45,0.92)] bg-gradient-to-b from-[#173745] to-[#0f2731] text-[#f3f8fa] shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_16px_32px_rgba(11,34,45,0.28)]";
 
+  const sortEntriesByDate = <T extends { date: string | null; title: string }>(entries: T[]) =>
+    [...entries].sort((left, right) => {
+      const leftDate = left.date ?? "9999-12-31";
+      const rightDate = right.date ?? "9999-12-31";
+
+      if (leftDate !== rightDate) {
+        return rightDate.localeCompare(leftDate);
+      }
+
+      return left.title.localeCompare(right.title);
+    });
+
   const filteredYears = useMemo(() => {
     if (!isSearching) {
-      return years;
+      return years.map((yearEntry) => ({
+        ...yearEntry,
+        entries: sortEntriesByDate(yearEntry.entries)
+      }));
     }
 
     return years
       .map((yearEntry) => ({
         ...yearEntry,
-        entries: yearEntry.entries.filter((entry) => {
-          const haystack = `${entry.title} ${entry.description ?? ""}`.toLowerCase();
-          return haystack.includes(normalizedQuery);
-        })
+        entries: sortEntriesByDate(
+          yearEntry.entries.filter((entry) => {
+            const haystack = `${entry.title} ${entry.description ?? ""}`.toLowerCase();
+            return haystack.includes(normalizedQuery);
+          })
+        )
       }))
       .filter((yearEntry) => yearEntry.entries.length > 0);
   }, [years, isSearching, normalizedQuery]);
 
   const filteredProspectEntries = useMemo(() => {
     if (!isSearching) {
-      return prospectEntries;
+      return sortEntriesByDate(prospectEntries);
     }
 
-    return prospectEntries.filter((entry) => {
-      const haystack = `${entry.title} ${entry.description ?? ""}`.toLowerCase();
-      return haystack.includes(normalizedQuery);
-    });
+    return sortEntriesByDate(
+      prospectEntries.filter((entry) => {
+        const haystack = `${entry.title} ${entry.description ?? ""}`.toLowerCase();
+        return haystack.includes(normalizedQuery);
+      })
+    );
   }, [prospectEntries, isSearching, normalizedQuery]);
 
   const showProspects = isSearching

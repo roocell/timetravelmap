@@ -55,6 +55,33 @@ function toSafeNumber(value: bigint | number | string | null | undefined) {
   return 0;
 }
 
+function toIsoDateString(value: Date | string | null | undefined) {
+  if (!value) {
+    return null;
+  }
+
+  if (value instanceof Date) {
+    return value.toISOString().slice(0, 10);
+  }
+
+  const text = String(value).trim();
+  if (!text) {
+    return null;
+  }
+
+  const isoMatch = text.match(/^(\d{4}-\d{2}-\d{2})/);
+  if (isoMatch) {
+    return isoMatch[1];
+  }
+
+  const parsed = new Date(text);
+  if (Number.isNaN(parsed.getTime())) {
+    return text;
+  }
+
+  return parsed.toISOString().slice(0, 10);
+}
+
 export async function GET(request: Request) {
   try {
     const user = await getStackUser(request);
@@ -192,7 +219,7 @@ export async function GET(request: Request) {
         id: row.id,
         kind: "event",
         title: row.title,
-        date: String(row.event_date).slice(0, 10),
+        date: toIsoDateString(row.event_date) ?? "",
         description: row.description
       });
     }
@@ -207,7 +234,7 @@ export async function GET(request: Request) {
         id: row.id,
         kind: "find",
         title: row.title,
-        date: String(row.find_date).slice(0, 10),
+        date: toIsoDateString(row.find_date) ?? "",
         description: row.description
       });
     }
@@ -233,7 +260,7 @@ export async function GET(request: Request) {
         entries: prospectListRows.map((row) => ({
           id: row.id,
           title: row.title,
-          date: row.date_visited ? String(row.date_visited).slice(0, 10) : null,
+          date: toIsoDateString(row.date_visited),
           description: row.description
         }))
       }
