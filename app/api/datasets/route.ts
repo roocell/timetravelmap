@@ -38,6 +38,15 @@ type ProspectListRow = {
   description: string | null;
 };
 
+type TilesetRow = {
+  id: string;
+  name: string | null;
+  provider_type: string;
+  is_visible: boolean;
+  url: string;
+  sort_order: number;
+};
+
 function toSafeNumber(value: bigint | number | string | null | undefined) {
   if (typeof value === "bigint") {
     return Number(value);
@@ -93,7 +102,7 @@ export async function GET(request: Request) {
     }
 
     const { prisma } = await import("../../../lib/prisma");
-    const [eventRows, findRows, eventAreaRows, eventListRows, findListRows, prospectCountRows, prospectListRows] =
+    const [eventRows, findRows, eventAreaRows, eventListRows, findListRows, prospectCountRows, prospectListRows, tilesetRows] =
       await Promise.all([
       prisma.$queryRaw<YearCount[]>`
         select extract(year from event_date)::int as year, count(*)::bigint as count
@@ -154,6 +163,18 @@ export async function GET(request: Request) {
         from timetravelmap.prospects
         where owner_id = ${user.id}
         order by date_visited asc nulls last, title asc
+      `,
+      prisma.$queryRaw<TilesetRow[]>`
+        select
+          id,
+          name,
+          provider_type,
+          is_visible,
+          url,
+          sort_order
+        from timetravelmap.user_tilesets
+        where owner_id = ${user.id}
+        order by sort_order asc, created_at asc
       `
     ]);
 
@@ -262,6 +283,16 @@ export async function GET(request: Request) {
           title: row.title,
           date: toIsoDateString(row.date_visited),
           description: row.description
+        }))
+      },
+      settings: {
+        tilesets: tilesetRows.map((row) => ({
+          id: row.id,
+          name: row.name,
+          type: row.provider_type,
+          visible: row.is_visible,
+          url: row.url,
+          sortOrder: row.sort_order
         }))
       }
     });

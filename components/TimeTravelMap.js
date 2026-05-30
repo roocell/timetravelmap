@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import L from "leaflet";
 import {
   Check,
@@ -32,35 +32,15 @@ const DEFAULT_LNG = -75.72070285499208;
 const DEFAULT_ZOOM = 12;
 const MIN_NATIVE_ZOOM = 12;
 const MAX_NATIVE_ZOOM = 12;
-
-const layerDefinitions = [
-  { key: "1879", url: "/tiles/1879/{z}/{x}/{y}.png" },
-  { key: "1928", url: "/tiles/1928/{z}/{x}/{y}.png" },
-  { key: "1930s", url: "/tiles/1930s/{z}/{x}/{y}.png" },
-  { key: "1945", url: "/tiles/1945/{z}/{x}/{y}.png" },
-  { key: "1954", url: "/tiles/1954/{z}/{x}/{y}.png" },
-  { key: "1958", url: "/tiles/1958/{z}/{x}/{y}.png" },
-  { key: "1965", url: "/tiles/1965/{z}/{x}/{y}.png" },
-  { key: "2015_lidar", url: "/tiles/2015_lidar/{z}/{x}/{y}.png" },
-  { key: "hrdem", url: "/tiles/hrdem/{z}/{x}/{y}.png" },
-  {
-    key: null,
-    url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
-  }
-];
-
-const sliderValues = [
-  "New",
-  "hrdem",
-  "lidar",
-  1965,
-  1958,
-  1954,
-  1945,
-  "1930s",
-  1928,
-  1879
-];
+const TILESET_SUFFIX = "/{z}/{x}/{y}.png";
+const ARCGIS_MAPSERVER_MARKER = "/MapServer";
+const WEB_MERCATOR_ORIGIN = 20037508.342789244;
+const WMS_PROVIDER_MARKER = "service=wms";
+const TILESET_PROVIDER_TYPES = {
+  XYZ: "xyz",
+  ARCGIS: "arcgis",
+  WMS: "wms"
+};
 
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -80,16 +60,220 @@ function getNumericParam(searchParams, name, fallback) {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+function inferTilesetType(value) {
+  const base = String(value ?? "").trim();
+  if (!base) {
+    return TILESET_PROVIDER_TYPES.XYZ;
+  }
+
+  if (isWmsTilesetUrl(base)) {
+    return TILESET_PROVIDER_TYPES.WMS;
+  }
+
+  if (base.toLowerCase().includes(ARCGIS_MAPSERVER_MARKER.toLowerCase())) {
+    return TILESET_PROVIDER_TYPES.ARCGIS;
+  }
+
+  return TILESET_PROVIDER_TYPES.XYZ;
+}
+
+function normalizeTilesetType(value, url) {
+  const normalized = String(value ?? "")
+    .trim()
+    .toLowerCase();
+
+  if (normalized === TILESET_PROVIDER_TYPES.XYZ) {
+    return TILESET_PROVIDER_TYPES.XYZ;
+  }
+
+  if (normalized === TILESET_PROVIDER_TYPES.ARCGIS) {
+    return TILESET_PROVIDER_TYPES.ARCGIS;
+  }
+
+  if (normalized === TILESET_PROVIDER_TYPES.WMS) {
+    return TILESET_PROVIDER_TYPES.WMS;
+  }
+
+  return inferTilesetType(url);
+}
+
+function buildTilesetTileUrl(value, type = TILESET_PROVIDER_TYPES.XYZ) {
+  const base = String(value ?? "").trim().replace(/\/+$/, "");
+  if (!base) {
+    return "";
+  }
+
+  if (type === TILESET_PROVIDER_TYPES.WMS) {
+    return base;
+  }
+
+  return type === TILESET_PROVIDER_TYPES.ARCGIS
+    ? base
+    : `${base}${TILESET_SUFFIX}`;
+}
+
+function isWmsTilesetUrl(value) {
+  const text = String(value ?? "").trim();
+  if (!text) {
+    return false;
+  }
+
+  try {
+    const parsed = new URL(text);
+    return parsed.searchParams.has("layers") || parsed.searchParams.get("service")?.toLowerCase() === "wms";
+  } catch {
+    return text.toLowerCase().includes(WMS_PROVIDER_MARKER);
+  }
+}
+
+function getTilesetLabel(value, type = TILESET_PROVIDER_TYPES.XYZ, customName = "") {
+  const trimmedName = String(customName ?? "").trim();
+  if (trimmedName) {
+    return trimmedName;
+  }
+
+  const text = String(value ?? "").trim();
+  if (!text) {
+    return "Tileset";
+  }
+
+  try {
+    const parsed = new URL(text);
+    if (type === TILESET_PROVIDER_TYPES.WMS) {
+      return parsed.searchParams.get("layers") || parsed.hostname;
+    }
+
+    const segments = parsed.pathname.split("/").filter(Boolean);
+    const lastSegment = segments[segments.length - 1];
+    const nextToLastSegment = segments[segments.length - 2];
+    if (lastSegment === "MapServer" && nextToLastSegment) {
+      return decodeURIComponent(nextToLastSegment);
+    }
+
+    return lastSegment ? decodeURIComponent(lastSegment) : parsed.hostname;
+  } catch {
+    if (type === TILESET_PROVIDER_TYPES.WMS) {
+      return "WMS";
+    }
+
+    const normalized = text.replace(/\/+$/, "");
+    const segments = normalized.split("/").filter(Boolean);
+    const lastSegment = segments[segments.length - 1];
+    const nextToLastSegment = segments[segments.length - 2];
+    if (lastSegment === "MapServer" && nextToLastSegment) {
+      return nextToLastSegment;
+    }
+
+    return lastSegment ?? normalized;
+  }
+}
+
 function createTileLayer(layerDefinition, opacity, tileLayerMeta) {
   const url = layerDefinition?.url;
   if (typeof url !== "string" || url.length === 0) {
     return null;
   }
 
-  const isRemoteImagery = url.includes("arcgisonline");
-  const localMeta = layerDefinition?.key ? tileLayerMeta?.[layerDefinition.key] : null;
-  const minNativeZoom = isRemoteImagery ? 12 : localMeta?.minNativeZoom ?? MIN_NATIVE_ZOOM;
-  const maxNativeZoom = isRemoteImagery ? 17 : localMeta?.maxNativeZoom ?? MAX_NATIVE_ZOOM;
+  const isRemoteImagery = !url.startsWith("/");
+  const isArcGisMapServer = url.toLowerCase().includes(ARCGIS_MAPSERVER_MARKER.toLowerCase());
+  const isWms = layerDefinition?.type === "wms";
+  const layerMeta = layerDefinition?.key ? tileLayerMeta?.[layerDefinition.key] : null;
+  const minNativeZoom = layerMeta?.minNativeZoom ?? (isRemoteImagery ? 12 : MIN_NATIVE_ZOOM);
+  const maxNativeZoom = layerMeta?.maxNativeZoom ?? (isRemoteImagery ? 17 : MAX_NATIVE_ZOOM);
+
+  if (isWms) {
+    let parsed;
+
+    try {
+      parsed = new URL(url);
+    } catch {
+      return null;
+    }
+
+    const baseUrl = `${parsed.origin}${parsed.pathname}`;
+    const searchParams = parsed.searchParams;
+    const version = searchParams.get("version") ?? "1.3.0";
+    const format = searchParams.get("format") ?? "image/png";
+    const styles = searchParams.get("styles") ?? "";
+    const transparent = searchParams.get("transparent") === "true";
+    const layers = searchParams.get("layers") ?? "";
+
+    if (!layers) {
+      return null;
+    }
+
+    const wmsOptions = {
+      layers,
+      format,
+      styles,
+      transparent,
+      version,
+      crs: L.CRS.EPSG3857,
+      minZoom: 5,
+      maxZoom: 22,
+      opacity
+    };
+
+    const layer = L.tileLayer.wms(baseUrl, wmsOptions);
+
+    for (const [key, value] of searchParams.entries()) {
+      const normalizedKey = key.toLowerCase();
+      if (
+        normalizedKey === "layers" ||
+        normalizedKey === "format" ||
+        normalizedKey === "styles" ||
+        normalizedKey === "transparent" ||
+        normalizedKey === "version" ||
+        normalizedKey === "service" ||
+        normalizedKey === "request" ||
+        normalizedKey === "bbox" ||
+        normalizedKey === "width" ||
+        normalizedKey === "height" ||
+        normalizedKey === "crs" ||
+        normalizedKey === "srs"
+      ) {
+        continue;
+      }
+
+      layer.wmsParams[key] = value;
+    }
+
+    layer.setOpacity(opacity);
+    return layer;
+  }
+
+  if (isArcGisMapServer) {
+    const layer = L.tileLayer("", {
+      minNativeZoom,
+      maxNativeZoom,
+      minZoom: 5,
+      maxZoom: 22,
+      opacity,
+      attribution: "ArcGIS MapServer",
+      tms: false
+    });
+
+    layer.getTileUrl = function getTileUrl(coords) {
+      const scale = (WEB_MERCATOR_ORIGIN * 2) / 2 ** coords.z;
+      const xmin = -WEB_MERCATOR_ORIGIN + coords.x * scale;
+      const xmax = xmin + scale;
+      const ymax = WEB_MERCATOR_ORIGIN - coords.y * scale;
+      const ymin = ymax - scale;
+      const params = new URLSearchParams({
+        bbox: `${xmin},${ymin},${xmax},${ymax}`,
+        bboxSR: "3857",
+        imageSR: "3857",
+        size: "256,256",
+        format: "jpg",
+        transparent: "false",
+        f: "image"
+      });
+
+      return `${url}/export?${params.toString()}`;
+    };
+
+    return layer;
+  }
 
   return L.tileLayer(url, {
     minNativeZoom,
@@ -457,6 +641,7 @@ export default function TimeTravelMap({
   datasetDebug = null,
   activeYears = [],
   prospectsActive = false,
+  onTilesetsSaved = () => {},
   onDatasetsChanged = () => {},
   onToggleYear = () => {},
   onToggleProspects = () => {}
@@ -465,6 +650,34 @@ export default function TimeTravelMap({
   const stackApp = useStackApp();
   const currentUserId = user?.id ?? null;
   const timelineLocked = !user || user.isRestricted === true;
+  const layerDefinitions = useMemo(
+    () =>
+      (datasets?.settings?.tilesets ?? [])
+        .map((tileset) => {
+          const baseUrl = String(tileset?.url ?? "").trim();
+          if (!baseUrl) {
+            return null;
+          }
+
+          if (tileset?.visible === false) {
+            return null;
+          }
+
+          const type = normalizeTilesetType(tileset?.type, baseUrl);
+
+          return {
+            key: `${type}:${baseUrl}`,
+            baseUrl,
+            type,
+            label: getTilesetLabel(baseUrl, type, tileset?.name),
+            url: buildTilesetTileUrl(baseUrl, type)
+          };
+        })
+        .filter(Boolean),
+    [datasets?.settings?.tilesets]
+  );
+  const sliderValues = useMemo(() => layerDefinitions.map((layer) => layer.label), [layerDefinitions]);
+  const maxLayerIndex = Math.max(layerDefinitions.length - 1, 0);
   const mapElementRef = useRef(null);
   const layerRefs = useRef([]);
   const datasetLayerRefs = useRef(new Map());
@@ -520,7 +733,14 @@ export default function TimeTravelMap({
 
     const loadTileLayerMeta = async () => {
       try {
-        const response = await fetch("/api/tiles/meta", {
+        const query = new URLSearchParams();
+        for (const layerDefinition of layerDefinitions) {
+          if (layerDefinition?.baseUrl && layerDefinition.baseUrl.startsWith("http")) {
+            query.append("url", layerDefinition.baseUrl);
+          }
+        }
+
+        const response = await fetch(`/api/tiles/meta?${query.toString()}`, {
           cache: "no-store"
         });
         const payload = await response.json().catch(() => ({}));
@@ -536,7 +756,7 @@ export default function TimeTravelMap({
     return () => {
       state.cancelled = true;
     };
-  }, []);
+  }, [layerDefinitions]);
 
   const beginGoogleSignIn = async () => {
     setAuthPending(true);
@@ -909,7 +1129,30 @@ export default function TimeTravelMap({
       nextLayer.addTo(map);
       layerRefs.current[index] = nextLayer;
     });
-  }, [tileLayerMeta]);
+  }, [layerDefinitions, tileLayerMeta]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) {
+      return;
+    }
+
+    layerRefs.current.forEach((layer) => {
+      if (layer) {
+        map.removeLayer(layer);
+      }
+    });
+    layerRefs.current = new Array(layerDefinitions.length).fill(null);
+
+    const clampedValue = Math.min(Math.max(sliderValueRef.current, 0), maxLayerIndex);
+    sliderValueRef.current = clampedValue;
+    setSliderValue(clampedValue);
+
+    if (layerDefinitions.length > 0) {
+      ensureLayer(clampedValue);
+      setActiveLayerOpacities(clampedValue, layersVisible);
+    }
+  }, [layerDefinitions, layersVisible, maxLayerIndex]);
 
   const setActiveLayerOpacities = (value, visible) => {
     const layer1Index = Math.floor(value);
@@ -974,10 +1217,7 @@ export default function TimeTravelMap({
     const requestedLayerIndex = searchParams.has("l")
       ? getNumericParam(searchParams, "l", 1)
       : savedView?.sliderValue ?? 1;
-    const initialLayerIndex = Math.min(
-      Math.max(requestedLayerIndex, 0),
-      layerDefinitions.length - 1
-    );
+    const initialLayerIndex = Math.min(Math.max(requestedLayerIndex, 0), maxLayerIndex);
 
     currentLayerIndexRef.current = initialLayerIndex;
     sliderValueRef.current = initialLayerIndex;
@@ -1079,8 +1319,10 @@ export default function TimeTravelMap({
     map.on("zoomend", persistMapView);
     map.on("error", () => {});
 
-    ensureLayer(initialLayerIndex);
-    setActiveLayerOpacities(initialLayerIndex, true);
+    if (layerDefinitions.length > 0) {
+      ensureLayer(initialLayerIndex);
+      setActiveLayerOpacities(initialLayerIndex, true);
+    }
     setZoomLabel(Math.round(map.getZoom()));
     persistMapView();
     showCurrentLocation();
@@ -1950,11 +2192,10 @@ export default function TimeTravelMap({
 
         <TimelineSlider
           labels={sliderValues}
-          max={layerDefinitions.length - 1}
+          max={maxLayerIndex}
           value={sliderValue}
           onChange={handleSliderChange}
-          disabled={timelineLocked}
-          reversed
+          disabled={timelineLocked || layerDefinitions.length === 0}
         />
       </Card>
 
@@ -1963,10 +2204,12 @@ export default function TimeTravelMap({
           years={datasets?.years ?? []}
           prospectCount={datasets?.prospects?.count ?? 0}
           prospectEntries={datasets?.prospects?.entries ?? []}
+          tilesets={datasets?.settings?.tilesets ?? []}
           loading={datasets?.loading}
           debug={datasetDebug}
           activeYears={activeYears}
           prospectsActive={prospectsActive}
+          onTilesetsSaved={onTilesetsSaved}
           onToggleYear={onToggleYear}
           onSelectEntry={(year, entry) => {
             void focusDatasetEntry(year, entry);

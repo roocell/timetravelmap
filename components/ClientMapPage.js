@@ -56,6 +56,7 @@ export default function ClientMapPage() {
   const [datasets, setDatasets] = useState({
     years: [],
     prospects: { count: 0, entries: [] },
+    settings: { tilesets: [] },
     loading: true
   });
   const [datasetDebug, setDatasetDebug] = useState({
@@ -73,6 +74,7 @@ export default function ClientMapPage() {
         setDatasets({
           years: [],
           prospects: { count: 0, entries: [] },
+          settings: { tilesets: [] },
           loading: false
         });
         setDatasetDebug({
@@ -92,6 +94,7 @@ export default function ClientMapPage() {
         setDatasets({
           years: [],
           prospects: { count: 0, entries: [] },
+          settings: { tilesets: [] },
           loading: false
         });
         setDatasetDebug({
@@ -121,6 +124,7 @@ export default function ClientMapPage() {
         setDatasets({
           years: payload.years ?? [],
           prospects: payload.prospects ?? { count: 0, entries: [] },
+          settings: payload.settings ?? { tilesets: [] },
           loading: false
         });
         setDatasetDebug({
@@ -137,6 +141,7 @@ export default function ClientMapPage() {
         setDatasets({
           years: [],
           prospects: { count: 0, entries: [] },
+          settings: { tilesets: [] },
           loading: false
         });
         setDatasetDebug({
@@ -183,6 +188,16 @@ export default function ClientMapPage() {
     );
   };
 
+  const handleTilesetsSaved = (tilesets) => {
+    setDatasets((current) => ({
+      ...current,
+      settings: {
+        ...(current.settings ?? {}),
+        tilesets
+      }
+    }));
+  };
+
   if (accessDenied) {
     return (
       <main className="min-h-screen px-4 py-10 sm:px-6">
@@ -218,6 +233,7 @@ export default function ClientMapPage() {
       activeYears={activeYears}
       prospectsActive={prospectsActive}
       datasetDebug={datasetDebug}
+      onTilesetsSaved={handleTilesetsSaved}
       onDatasetsChanged={() => loadDatasets()}
       onToggleYear={toggleYear}
       onToggleProspects={() => setProspectsActive((current) => !current)}
