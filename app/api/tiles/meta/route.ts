@@ -11,6 +11,11 @@ type ArcGisLod = {
   levelID?: number | string | null;
 };
 
+function toFiniteNumber(value: unknown) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 async function getLayerZoomRange(layerDir: string) {
   const entries = await readdir(layerDir, { withFileTypes: true });
   const zoomLevels = entries
@@ -29,7 +34,7 @@ async function getLayerZoomRange(layerDir: string) {
   };
 }
 
-async function getArcGisZoomRange(baseUrl: string) {
+async function getArcGisMetadata(baseUrl: string) {
   try {
     const response = await fetch(`${baseUrl}?f=pjson`, {
       cache: "no-store"
@@ -41,18 +46,23 @@ async function getArcGisZoomRange(baseUrl: string) {
 
     const payload = await response.json().catch(() => null);
     const lods = Array.isArray(payload?.tileInfo?.lods) ? (payload.tileInfo.lods as ArcGisLod[]) : [];
+    const capabilities = String(payload?.capabilities ?? "");
+    const isTiled = capabilities.split(",").includes("TilesOnly");
+    const minLOD = toFiniteNumber(payload?.minLOD);
+    const maxLOD = toFiniteNumber(payload?.maxLOD);
     const levels = lods
       .map((lod) => Number(lod?.level ?? lod?.levelID))
       .filter(Number.isFinite)
       .sort((a: number, b: number) => a - b);
 
     if (levels.length === 0) {
-      return null;
+      return isTiled ? { isTiled } : null;
     }
 
     return {
-      minNativeZoom: levels[0],
-      maxNativeZoom: levels[levels.length - 1]
+      isTiled,
+      minNativeZoom: minLOD ?? levels[0],
+      maxNativeZoom: maxLOD ?? levels[levels.length - 1]
     };
   } catch {
     return null;
@@ -61,7 +71,7 @@ async function getArcGisZoomRange(baseUrl: string) {
 
 export async function GET(request: Request) {
   const tilesRoot = path.join(process.cwd(), "public", "tiles");
-  const response: Record<string, { minNativeZoom: number; maxNativeZoom: number }> = {};
+  const response: Record<string, { minNativeZoom?: number; maxNativeZoom?: number; isTiled?: boolean }> = {};
 
   try {
     const entries = await readdir(tilesRoot, { withFileTypes: true });
@@ -86,9 +96,9 @@ export async function GET(request: Request) {
         continue;
       }
 
-      const zoomRange = await getArcGisZoomRange(remoteUrl);
-      if (zoomRange) {
-        response[remoteUrl] = zoomRange;
+      const metadata = await getArcGisMetadata(remoteUrl);
+      if (metadata) {
+        response[remoteUrl] = metadata;
       }
     }
 

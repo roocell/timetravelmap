@@ -170,7 +170,11 @@ function getTilesetLabel(value, type = TILESET_PROVIDER_TYPES.XYZ, customName = 
   }
 }
 
-function shouldUseArcGisTileEndpoint(url) {
+function shouldUseArcGisTileEndpoint(url, layerMeta) {
+  if (layerMeta?.isTiled) {
+    return true;
+  }
+
   const text = String(url ?? "").trim();
   if (!text) {
     return false;
@@ -178,7 +182,7 @@ function shouldUseArcGisTileEndpoint(url) {
 
   try {
     const parsed = new URL(text);
-    return parsed.hostname === "services.arcgisonline.com";
+    return parsed.hostname === "services.arcgisonline.com" || parsed.hostname === "tiles.arcgis.com";
   } catch {
     return false;
   }
@@ -193,7 +197,11 @@ function createTileLayer(layerDefinition, opacity, tileLayerMeta) {
   const isRemoteImagery = !url.startsWith("/");
   const isArcGisMapServer = url.toLowerCase().includes(ARCGIS_MAPSERVER_MARKER.toLowerCase());
   const isWms = layerDefinition?.type === "wms";
-  const layerMeta = layerDefinition?.key ? tileLayerMeta?.[layerDefinition.key] : null;
+  const layerMeta =
+    (layerDefinition?.key ? tileLayerMeta?.[layerDefinition.key] : null) ??
+    (layerDefinition?.baseUrl ? tileLayerMeta?.[layerDefinition.baseUrl] : null) ??
+    tileLayerMeta?.[url] ??
+    null;
   const minNativeZoom = layerMeta?.minNativeZoom ?? (isRemoteImagery ? REMOTE_MIN_NATIVE_ZOOM : MIN_NATIVE_ZOOM);
   const maxNativeZoom = layerMeta?.maxNativeZoom ?? (isRemoteImagery ? REMOTE_MAX_NATIVE_ZOOM : MAX_NATIVE_ZOOM);
 
@@ -259,7 +267,7 @@ function createTileLayer(layerDefinition, opacity, tileLayerMeta) {
   }
 
   if (isArcGisMapServer) {
-    if (shouldUseArcGisTileEndpoint(url)) {
+    if (shouldUseArcGisTileEndpoint(url, layerMeta)) {
       return L.tileLayer(`${url}/tile/{z}/{y}/{x}`, {
         minNativeZoom,
         maxNativeZoom,
