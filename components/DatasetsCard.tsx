@@ -664,6 +664,9 @@ export default function DatasetsCard({
                           WMS: use the full service URL with query params such as{" "}
                           <code>service=WMS&amp;layers=...</code>.
                         </div>
+                        <div className="mt-1">
+                          To remove an entry, delete the URL and save.
+                        </div>
                       </div>
                     </div>
                   </div>

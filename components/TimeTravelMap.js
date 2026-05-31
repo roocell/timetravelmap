@@ -32,6 +32,8 @@ const DEFAULT_LNG = -75.72070285499208;
 const DEFAULT_ZOOM = 12;
 const MIN_NATIVE_ZOOM = 12;
 const MAX_NATIVE_ZOOM = 12;
+const REMOTE_MIN_NATIVE_ZOOM = 0;
+const REMOTE_MAX_NATIVE_ZOOM = 17;
 const TILESET_SUFFIX = "/{z}/{x}/{y}.png";
 const ARCGIS_MAPSERVER_MARKER = "/MapServer";
 const WEB_MERCATOR_ORIGIN = 20037508.342789244;
@@ -168,6 +170,20 @@ function getTilesetLabel(value, type = TILESET_PROVIDER_TYPES.XYZ, customName = 
   }
 }
 
+function shouldUseArcGisTileEndpoint(url) {
+  const text = String(url ?? "").trim();
+  if (!text) {
+    return false;
+  }
+
+  try {
+    const parsed = new URL(text);
+    return parsed.hostname === "services.arcgisonline.com";
+  } catch {
+    return false;
+  }
+}
+
 function createTileLayer(layerDefinition, opacity, tileLayerMeta) {
   const url = layerDefinition?.url;
   if (typeof url !== "string" || url.length === 0) {
@@ -178,8 +194,8 @@ function createTileLayer(layerDefinition, opacity, tileLayerMeta) {
   const isArcGisMapServer = url.toLowerCase().includes(ARCGIS_MAPSERVER_MARKER.toLowerCase());
   const isWms = layerDefinition?.type === "wms";
   const layerMeta = layerDefinition?.key ? tileLayerMeta?.[layerDefinition.key] : null;
-  const minNativeZoom = layerMeta?.minNativeZoom ?? (isRemoteImagery ? 12 : MIN_NATIVE_ZOOM);
-  const maxNativeZoom = layerMeta?.maxNativeZoom ?? (isRemoteImagery ? 17 : MAX_NATIVE_ZOOM);
+  const minNativeZoom = layerMeta?.minNativeZoom ?? (isRemoteImagery ? REMOTE_MIN_NATIVE_ZOOM : MIN_NATIVE_ZOOM);
+  const maxNativeZoom = layerMeta?.maxNativeZoom ?? (isRemoteImagery ? REMOTE_MAX_NATIVE_ZOOM : MAX_NATIVE_ZOOM);
 
   if (isWms) {
     let parsed;
@@ -243,6 +259,18 @@ function createTileLayer(layerDefinition, opacity, tileLayerMeta) {
   }
 
   if (isArcGisMapServer) {
+    if (shouldUseArcGisTileEndpoint(url)) {
+      return L.tileLayer(`${url}/tile/{z}/{y}/{x}`, {
+        minNativeZoom,
+        maxNativeZoom,
+        minZoom: 0,
+        maxZoom: 22,
+        opacity,
+        attribution: "ArcGIS MapServer",
+        tms: false
+      });
+    }
+
     const layer = L.tileLayer("", {
       minNativeZoom,
       maxNativeZoom,

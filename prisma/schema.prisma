@@ -191,3 +191,11 @@ model UserTileset {
   @@map("user_tilesets")
   @@schema("timetravelmap")
 }
+
+model UserTilesetProfile {
+  ownerId       String   @id @map("owner_id")
+  initializedAt DateTime @default(now()) @map("initialized_at") @db.Timestamptz(6)
+
+  @@map("user_tileset_profiles")
+  @@schema("timetravelmap")
+}

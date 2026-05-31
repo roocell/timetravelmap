@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getStackUser } from "../../../stack";
 import { canAccessApp } from "../../../lib/access";
+import { ensureDefaultUserTilesets } from "../../../lib/user-tilesets";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -102,6 +103,7 @@ export async function GET(request: Request) {
     }
 
     const { prisma } = await import("../../../lib/prisma");
+    await ensureDefaultUserTilesets(prisma, user.id);
     const [eventRows, findRows, eventAreaRows, eventListRows, findListRows, prospectCountRows, prospectListRows, tilesetRows] =
       await Promise.all([
       prisma.$queryRaw<YearCount[]>`
