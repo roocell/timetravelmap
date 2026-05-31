@@ -73,15 +73,22 @@ function normalizeTilesetInput(value: string) {
     return "";
   }
 
-  const withoutXyzSuffix = trimmed.endsWith(TILESET_SUFFIX)
-    ? trimmed.slice(0, -TILESET_SUFFIX.length)
-    : trimmed;
-  const withoutArcGisTemplate = withoutXyzSuffix.endsWith(ARCGIS_TILE_SUFFIX)
-    ? withoutXyzSuffix.slice(0, -ARCGIS_TILE_SUFFIX.length)
-    : withoutXyzSuffix;
-  const withoutArcGisTilePath = stripArcGisTilePath(withoutArcGisTemplate);
+  return trimmed
+    .split(/,\s*(?=https?:\/\/)/i)
+    .map((entry) => {
+      const normalizedEntry = entry.trim();
+      const withoutXyzSuffix = normalizedEntry.endsWith(TILESET_SUFFIX)
+        ? normalizedEntry.slice(0, -TILESET_SUFFIX.length)
+        : normalizedEntry;
+      const withoutArcGisTemplate = withoutXyzSuffix.endsWith(ARCGIS_TILE_SUFFIX)
+        ? withoutXyzSuffix.slice(0, -ARCGIS_TILE_SUFFIX.length)
+        : withoutXyzSuffix;
+      const withoutArcGisTilePath = stripArcGisTilePath(withoutArcGisTemplate);
 
-  return withoutArcGisTilePath.replace(/\/+$/, "");
+      return withoutArcGisTilePath.replace(/\/+$/, "");
+    })
+    .filter(Boolean)
+    .join(", ");
 }
 
 function normalizeTilesetType(value: unknown, url: string): TilesetProviderType {
@@ -653,7 +660,7 @@ export default function DatasetsCard({
                       >
                         <div>Add custom tileset base URLs for your account.</div>
                         <div className="mt-1">
-                          PNG: use a base tileset URL like <code>https://your-domain.com/tiles/1879</code>{" "}
+                          XYZ: use a base tileset URL like <code>https://your-domain.com/tiles/1879</code>{" "}
                           and leave off <code>/{"{z}"}/{"{x}"}/{"{y}"}.png</code>.
                         </div>
                         <div className="mt-1">
@@ -663,6 +670,9 @@ export default function DatasetsCard({
                         <div className="mt-1">
                           WMS: use the full service URL with query params such as{" "}
                           <code>service=WMS&amp;layers=...</code>.
+                        </div>
+                        <div className="mt-1">
+                          Put multiple URLs in one field with commas to render them together under one timeline label.
                         </div>
                         <div className="mt-1">
                           To remove an entry, delete the URL and save.
@@ -769,7 +779,7 @@ export default function DatasetsCard({
                         value.type === "wms"
                           ? "https://example.com/wms?service=WMS&layers=layer-name&format=image/png"
                           : value.type === "arcgis"
-                            ? "https://example.com/arcgis/rest/services/LayerName/MapServer"
+                            ? "https://example.com/arcgis/rest/services/LayerName/MapServer, https://example.com/arcgis/rest/services/Overlay/MapServer"
                             : "https://example.com/tiles/1879"
                       }
                       className="min-w-0 flex-1 rounded-xl border border-[rgba(21,49,63,0.1)] bg-white/92 px-3 py-2 text-[13px] text-[#15313f] outline-none placeholder:text-[#7b8d97] max-[900px]:w-full"

@@ -68,6 +68,14 @@ function normalizeTilesetBaseUrl(raw: string) {
   return parsed.toString().replace(/\/+$/, "");
 }
 
+function normalizeTilesetBaseUrls(raw: string) {
+  return raw
+    .split(/,\s*(?=https?:\/\/)/i)
+    .map((value) => value.trim())
+    .filter(Boolean)
+    .map((value) => normalizeTilesetBaseUrl(value));
+}
+
 function normalizeTilesetType(value: unknown, url: string): TilesetProviderType {
   const normalized = String(value ?? "")
     .trim()
@@ -108,7 +116,12 @@ function normalizeTilesetEntries(value: unknown) {
     if (!raw) {
       continue;
     }
-    const url = normalizeTilesetBaseUrl(raw);
+    const urls = normalizeTilesetBaseUrls(raw);
+    if (urls.length === 0) {
+      continue;
+    }
+
+    const url = urls.join(", ");
     const type = normalizeTilesetType(rawEntry.type, url);
     const name = String(rawEntry.name ?? "").trim() || null;
     const visible = rawEntry.visible === undefined ? true : Boolean(rawEntry.visible);

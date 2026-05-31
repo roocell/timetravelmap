@@ -114,6 +114,13 @@ function buildTilesetTileUrl(value, type = TILESET_PROVIDER_TYPES.XYZ) {
     : `${base}${TILESET_SUFFIX}`;
 }
 
+function splitTilesetUrls(value) {
+  return String(value ?? "")
+    .split(/,\s*(?=https?:\/\/)/i)
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
+
 function isWmsTilesetUrl(value) {
   const text = String(value ?? "").trim();
   if (!text) {
@@ -189,6 +196,42 @@ function shouldUseArcGisTileEndpoint(url, layerMeta) {
 }
 
 function createTileLayer(layerDefinition, opacity, tileLayerMeta) {
+  const urls = Array.isArray(layerDefinition?.urls) ? layerDefinition.urls.filter(Boolean) : [];
+  if (urls.length > 1) {
+    const layers = urls
+      .map((url) =>
+        createTileLayer(
+          {
+            ...layerDefinition,
+            baseUrl: url,
+            key: `${layerDefinition?.type ?? TILESET_PROVIDER_TYPES.XYZ}:${url}`,
+            url,
+            urls: []
+          },
+          opacity,
+          tileLayerMeta
+        )
+      )
+      .filter(Boolean);
+
+    if (layers.length === 0) {
+      return null;
+    }
+
+    const group = L.layerGroup(layers);
+    group.options = { opacity };
+    group.setOpacity = (nextOpacity) => {
+      group.options.opacity = nextOpacity;
+      layers.forEach((layer) => {
+        if (typeof layer.setOpacity === "function") {
+          layer.setOpacity(nextOpacity);
+        }
+      });
+      return group;
+    };
+    return group;
+  }
+
   const url = layerDefinition?.url;
   if (typeof url !== "string" || url.length === 0) {
     return null;
@@ -700,13 +743,17 @@ export default function TimeTravelMap({
           }
 
           const type = normalizeTilesetType(tileset?.type, baseUrl);
+          const baseUrls = splitTilesetUrls(baseUrl);
+          const urls = baseUrls.map((url) => buildTilesetTileUrl(url, type));
 
           return {
-            key: `${type}:${baseUrl}`,
-            baseUrl,
+            key: `${type}:${baseUrls.join(",")}`,
+            baseUrl: baseUrls[0] ?? baseUrl,
+            baseUrls,
             type,
             label: getTilesetLabel(baseUrl, type, tileset?.name),
-            url: buildTilesetTileUrl(baseUrl, type)
+            url: urls[0] ?? "",
+            urls
           };
         })
         .filter(Boolean),
@@ -771,8 +818,15 @@ export default function TimeTravelMap({
       try {
         const query = new URLSearchParams();
         for (const layerDefinition of layerDefinitions) {
-          if (layerDefinition?.baseUrl && layerDefinition.baseUrl.startsWith("http")) {
-            query.append("url", layerDefinition.baseUrl);
+          const baseUrls =
+            Array.isArray(layerDefinition?.baseUrls) && layerDefinition.baseUrls.length > 0
+              ? layerDefinition.baseUrls
+              : [layerDefinition?.baseUrl];
+
+          for (const baseUrl of baseUrls) {
+            if (baseUrl && baseUrl.startsWith("http")) {
+              query.append("url", baseUrl);
+            }
           }
         }
 
@@ -1148,7 +1202,10 @@ export default function TimeTravelMap({
 
     layerRefs.current.forEach((layer, index) => {
       const layerDefinition = layerDefinitions[index];
-      if (!layer || !layerDefinition?.key || !tileLayerMeta[layerDefinition.key]) {
+      const hasMetadata = (layerDefinition?.baseUrls ?? [layerDefinition?.baseUrl]).some(
+        (baseUrl) => baseUrl && tileLayerMeta[baseUrl]
+      );
+      if (!layer || !hasMetadata) {
         return;
       }
 
