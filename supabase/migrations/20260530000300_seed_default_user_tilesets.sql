@@ -30,10 +30,9 @@ defaults as (
       (1, '1930s', 'xyz', true, 'https://timetravelmap.roocell.com/tiles/1930s'),
       (2, '1945', 'xyz', true, 'https://timetravelmap.roocell.com/tiles/1945'),
       (3, '1954', 'xyz', true, 'https://timetravelmap.roocell.com/tiles/1954'),
-      (4, '1965', 'arcgis', true, 'https://maps.ottawa.ca/arcgis/rest/services/Basemap_Imagery_1965/MapServer'),
-      (5, '1976', 'arcgis', true, 'https://maps.ottawa.ca/arcgis/rest/services/Basemap_Imagery_1976/MapServer'),
-      (6, 'hillshade', 'wms', true, 'https://datacube.services.geo.ca/wrapper/ogc/elevation-hrdem-mosaic?service=WMS&layers=dtm-hillshade&format=image/png'),
-      (7, 'current', 'arcgis', true, 'https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer')
+      (4, '1965', 'xyz', true, 'https://timetravelmap.roocell.com/tiles/1965'),
+      (5, 'hillshade', 'wms', true, 'https://datacube.services.geo.ca/wrapper/ogc/elevation-hrdem-mosaic?service=WMS&layers=dtm-hillshade&format=image/png'),
+      (6, 'current', 'arcgis', true, 'https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer')
   ) as seed(sort_order, name, provider_type, is_visible, url)
 )
 insert into timetravelmap.user_tileset_profiles (owner_id)
@@ -67,10 +66,9 @@ defaults as (
       (1, '1930s', 'xyz', true, 'https://timetravelmap.roocell.com/tiles/1930s'),
       (2, '1945', 'xyz', true, 'https://timetravelmap.roocell.com/tiles/1945'),
       (3, '1954', 'xyz', true, 'https://timetravelmap.roocell.com/tiles/1954'),
-      (4, '1965', 'arcgis', true, 'https://maps.ottawa.ca/arcgis/rest/services/Basemap_Imagery_1965/MapServer'),
-      (5, '1976', 'arcgis', true, 'https://maps.ottawa.ca/arcgis/rest/services/Basemap_Imagery_1976/MapServer'),
-      (6, 'hillshade', 'wms', true, 'https://datacube.services.geo.ca/wrapper/ogc/elevation-hrdem-mosaic?service=WMS&layers=dtm-hillshade&format=image/png'),
-      (7, 'current', 'arcgis', true, 'https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer')
+      (4, '1965', 'xyz', true, 'https://timetravelmap.roocell.com/tiles/1965'),
+      (5, 'hillshade', 'wms', true, 'https://datacube.services.geo.ca/wrapper/ogc/elevation-hrdem-mosaic?service=WMS&layers=dtm-hillshade&format=image/png'),
+      (6, 'current', 'arcgis', true, 'https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer')
   ) as seed(sort_order, name, provider_type, is_visible, url)
 )
 insert into timetravelmap.user_tilesets (

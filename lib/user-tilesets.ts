@@ -34,14 +34,8 @@ export const DEFAULT_USER_TILESETS: Array<{
   },
   {
     name: "1965",
-    type: "arcgis",
-    url: "https://maps.ottawa.ca/arcgis/rest/services/Basemap_Imagery_1965/MapServer",
-    visible: true
-  },
-  {
-    name: "1976",
-    type: "arcgis",
-    url: "https://maps.ottawa.ca/arcgis/rest/services/Basemap_Imagery_1976/MapServer",
+    type: "xyz",
+    url: "https://timetravelmap.roocell.com/tiles/1965",
     visible: true
   },
   {
