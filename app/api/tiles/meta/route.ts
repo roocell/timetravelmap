@@ -5,15 +5,37 @@ import path from "node:path";
 export const dynamic = "force-dynamic";
 
 const ARCGIS_MAPSERVER_MARKER = "/MapServer";
+const WEB_MERCATOR_BASE_RESOLUTION = 156543.03392804097;
 
 type ArcGisLod = {
   level?: number | string | null;
   levelID?: number | string | null;
+  resolution?: number | string | null;
+};
+
+type ArcGisMetadata = {
+  isTiled?: boolean;
+  minNativeZoom?: number;
+  maxNativeZoom?: number;
+  lods?: Array<{
+    level: number;
+    resolution: number;
+  }>;
 };
 
 function toFiniteNumber(value: unknown) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function resolutionToWebMercatorZoom(value: unknown) {
+  const resolution = toFiniteNumber(value);
+  if (!resolution || resolution <= 0) {
+    return null;
+  }
+
+  const zoom = Math.log2(WEB_MERCATOR_BASE_RESOLUTION / resolution);
+  return Number.isFinite(zoom) ? Math.round(zoom) : null;
 }
 
 async function getLayerZoomRange(layerDir: string) {
@@ -47,23 +69,37 @@ async function getArcGisMetadata(baseUrl: string) {
     const payload = await response.json().catch(() => null);
     const lods = Array.isArray(payload?.tileInfo?.lods) ? (payload.tileInfo.lods as ArcGisLod[]) : [];
     const capabilities = String(payload?.capabilities ?? "");
-    const isTiled = capabilities.split(",").includes("TilesOnly");
-    const minLOD = toFiniteNumber(payload?.minLOD);
-    const maxLOD = toFiniteNumber(payload?.maxLOD);
-    const levels = lods
-      .map((lod) => Number(lod?.level ?? lod?.levelID))
-      .filter(Number.isFinite)
-      .sort((a: number, b: number) => a - b);
+    const lodMetadata = lods
+      .map((lod) => {
+        const level = toFiniteNumber(lod?.level ?? lod?.levelID);
+        const resolution = toFiniteNumber(lod?.resolution);
+        if (level === null || resolution === null) {
+          return null;
+        }
 
-    if (levels.length === 0) {
+        return { level, resolution };
+      })
+      .filter((lod): lod is { level: number; resolution: number } => Boolean(lod))
+      .sort((a, b) => a.level - b.level);
+    const isTiled =
+      Boolean(payload?.singleFusedMapCache) ||
+      lodMetadata.length > 0 ||
+      capabilities.split(",").map((value) => value.trim()).includes("TilesOnly");
+    const nativeZoomLevels = lodMetadata
+      .map((lod) => resolutionToWebMercatorZoom(lod.resolution))
+      .filter((zoom): zoom is number => zoom !== null)
+      .sort((a, b) => a - b);
+
+    if (lodMetadata.length === 0) {
       return isTiled ? { isTiled } : null;
     }
 
     return {
       isTiled,
-      minNativeZoom: minLOD ?? levels[0],
-      maxNativeZoom: maxLOD ?? levels[levels.length - 1]
-    };
+      minNativeZoom: nativeZoomLevels[0],
+      maxNativeZoom: nativeZoomLevels[nativeZoomLevels.length - 1],
+      lods: lodMetadata
+    } satisfies ArcGisMetadata;
   } catch {
     return null;
   }
@@ -71,7 +107,7 @@ async function getArcGisMetadata(baseUrl: string) {
 
 export async function GET(request: Request) {
   const tilesRoot = path.join(process.cwd(), "public", "tiles");
-  const response: Record<string, { minNativeZoom?: number; maxNativeZoom?: number; isTiled?: boolean }> = {};
+  const response: Record<string, ArcGisMetadata> = {};
 
   try {
     const entries = await readdir(tilesRoot, { withFileTypes: true });

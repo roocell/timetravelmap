@@ -36,6 +36,7 @@ const REMOTE_MIN_NATIVE_ZOOM = 0;
 const REMOTE_MAX_NATIVE_ZOOM = 17;
 const TILESET_SUFFIX = "/{z}/{x}/{y}.png";
 const ARCGIS_MAPSERVER_MARKER = "/MapServer";
+const WEB_MERCATOR_BASE_RESOLUTION = 156543.03392804097;
 const WEB_MERCATOR_ORIGIN = 20037508.342789244;
 const WMS_PROVIDER_MARKER = "service=wms";
 const TILESET_PROVIDER_TYPES = {
@@ -195,6 +196,36 @@ function shouldUseArcGisTileEndpoint(url, layerMeta) {
   }
 }
 
+function getArcGisTileLevel(zoom, layerMeta) {
+  const lods = Array.isArray(layerMeta?.lods)
+    ? layerMeta.lods
+        .map((lod) => {
+          const level = Number(lod?.level);
+          const resolution = Number(lod?.resolution);
+          return Number.isFinite(level) && Number.isFinite(resolution) && resolution > 0 ? { level, resolution } : null;
+        })
+        .filter(Boolean)
+    : [];
+
+  if (lods.length === 0) {
+    return zoom;
+  }
+
+  const targetResolution = WEB_MERCATOR_BASE_RESOLUTION / 2 ** zoom;
+  let bestLevel = lods[0].level;
+  let bestDelta = Math.abs(lods[0].resolution - targetResolution);
+
+  for (const lod of lods.slice(1)) {
+    const delta = Math.abs(lod.resolution - targetResolution);
+    if (delta < bestDelta) {
+      bestDelta = delta;
+      bestLevel = lod.level;
+    }
+  }
+
+  return bestLevel;
+}
+
 function createTileLayer(layerDefinition, opacity, tileLayerMeta) {
   const urls = Array.isArray(layerDefinition?.urls) ? layerDefinition.urls.filter(Boolean) : [];
   if (urls.length > 1) {
@@ -311,7 +342,7 @@ function createTileLayer(layerDefinition, opacity, tileLayerMeta) {
 
   if (isArcGisMapServer) {
     if (shouldUseArcGisTileEndpoint(url, layerMeta)) {
-      return L.tileLayer(`${url}/tile/{z}/{y}/{x}`, {
+      const layer = L.tileLayer("", {
         minNativeZoom,
         maxNativeZoom,
         minZoom: 0,
@@ -320,6 +351,13 @@ function createTileLayer(layerDefinition, opacity, tileLayerMeta) {
         attribution: "ArcGIS MapServer",
         tms: false
       });
+
+      layer.getTileUrl = function getTileUrl(coords) {
+        const level = getArcGisTileLevel(coords.z, layerMeta);
+        return `${url}/tile/${level}/${coords.y}/${coords.x}`;
+      };
+
+      return layer;
     }
 
     const layer = L.tileLayer("", {
