@@ -206,7 +206,7 @@ export default function DatasetsCard({
   const [tilesetHelpOpen, setTilesetHelpOpen] = useState(false);
   const [backupYear, setBackupYear] = useState<number | "">("");
   const [backupImages, setBackupImages] = useState(true);
-  const [backupProspects, setBackupProspects] = useState(false);
+  const [prospectBackupImages, setProspectBackupImages] = useState(true);
   const [backupError, setBackupError] = useState<string | null>(null);
   const yearRowRefs = useRef<Record<number, HTMLDivElement | null>>({});
   const prospectsRowRef = useRef<HTMLDivElement | null>(null);
@@ -451,11 +451,18 @@ export default function DatasetsCard({
 
     const params = new URLSearchParams({
       year: String(backupYear),
-      images: backupImages ? "true" : "false",
-      prospects: backupProspects ? "true" : "false"
+      images: backupImages ? "true" : "false"
     });
 
     setBackupError(null);
+    window.location.assign(`/api/backup?${params.toString()}`);
+  };
+
+  const exportProspects = () => {
+    const params = new URLSearchParams({
+      scope: "prospects",
+      images: prospectBackupImages ? "true" : "false"
+    });
     window.location.assign(`/api/backup?${params.toString()}`);
   };
 
@@ -847,35 +854,21 @@ export default function DatasetsCard({
         </div>
 
         <div className="grid gap-4 p-[18px]">
-          <div className="overflow-hidden rounded-2xl border border-[rgba(21,49,63,0.08)] bg-white/70">
-            <div className="grid gap-4 px-[18px] py-4">
-              <div className="flex items-center justify-between gap-3 max-[760px]:flex-col max-[760px]:items-stretch">
-                <div>
-                  <div className="text-[14px] font-semibold text-[#15313f]">Yearly export</div>
-                </div>
-
-                <Button
-                  type="button"
-                  onClick={exportBackup}
-                  disabled={loading || backupYear === ""}
-                  className="inline-flex shrink-0 items-center gap-2 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  <Download size={15} strokeWidth={2.2} />
-                  <span>Export</span>
-                </Button>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-3">
-                <label className="grid min-w-[160px] gap-1.5">
-                  <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-[#6a7d88]">Year</span>
+          <div className="flex flex-wrap items-center justify-between gap-4 px-[18px] py-4">
+            <div className="inline-flex items-center gap-2 text-[14px] font-semibold text-[#15313f]">
+              <Database size={16} strokeWidth={2.1} />
+              <span>Events and finds</span>
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
                   <select
+                    aria-label="Export year"
                     value={backupYear}
                     onChange={(event) => {
                       const year = Number.parseInt(event.currentTarget.value, 10);
                       setBackupYear(Number.isFinite(year) ? year : "");
                     }}
                     disabled={loading || years.length === 0}
-                    className="rounded-xl border border-[rgba(21,49,63,0.1)] bg-white/92 px-3 py-2 text-[13px] text-[#15313f] outline-none disabled:cursor-not-allowed disabled:opacity-50"
+                    className="min-h-10 rounded-lg border border-[rgba(21,49,63,0.1)] bg-white/92 px-3 py-2 text-[13px] text-[#15313f] outline-none disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     {years.length === 0 ? (
                       <option value="">No years</option>
@@ -887,9 +880,7 @@ export default function DatasetsCard({
                       ))
                     )}
                   </select>
-                </label>
-
-                <label className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-[rgba(21,49,63,0.08)] bg-[rgba(248,251,252,0.7)] px-3 py-2 text-[13px] font-semibold text-[#15313f]">
+                <label className="inline-flex min-h-10 items-center gap-2 text-[13px] font-semibold text-[#15313f]">
                   <input
                     type="checkbox"
                     checked={backupImages}
@@ -899,24 +890,47 @@ export default function DatasetsCard({
                   <ImageIcon size={15} strokeWidth={2.1} />
                   <span>Include images</span>
                 </label>
-
-                <label className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-[rgba(21,49,63,0.08)] bg-[rgba(248,251,252,0.7)] px-3 py-2 text-[13px] font-semibold text-[#15313f]">
-                  <input
-                    type="checkbox"
-                    checked={backupProspects}
-                    onChange={(event) => setBackupProspects(event.currentTarget.checked)}
-                    className="h-4 w-4 accent-[#15313f]"
-                  />
-                  <MapPinned size={15} strokeWidth={2.1} />
-                  <span>Dated prospects</span>
-                </label>
+                <Button
+                  type="button"
+                  onClick={exportBackup}
+                  disabled={loading || backupYear === ""}
+                  className="inline-flex shrink-0 items-center gap-2 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <Download size={15} strokeWidth={2.2} />
+                  <span>Export</span>
+                </Button>
+            </div>
+            {backupError ? (
+              <div role="alert" className="w-full text-[12px] text-[#7a3e21]">
+                {backupError}
               </div>
-
-              {backupError ? (
-                <div className="rounded-2xl border border-[rgba(180,60,20,0.16)] bg-[rgba(255,248,244,0.92)] px-4 py-3 text-[12px] text-[#7a3e21]">
-                  {backupError}
-                </div>
-              ) : null}
+            ) : null}
+          </div>
+          <div className="flex flex-wrap items-center justify-between gap-4 border-t border-[rgba(21,49,63,0.08)] px-[18px] py-4">
+            <div className="inline-flex items-center gap-2 text-[14px] font-semibold text-[#15313f]">
+              <MapPinned size={16} strokeWidth={2.1} />
+              <span>All prospects</span>
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              <label className="inline-flex min-h-10 items-center gap-2 text-[13px] font-semibold text-[#15313f]">
+                <input
+                  type="checkbox"
+                  checked={prospectBackupImages}
+                  onChange={(event) => setProspectBackupImages(event.currentTarget.checked)}
+                  className="h-4 w-4 accent-[#15313f]"
+                />
+                <ImageIcon size={15} strokeWidth={2.1} />
+                <span>Include images</span>
+              </label>
+              <Button
+                type="button"
+                onClick={exportProspects}
+                disabled={loading}
+                className="inline-flex shrink-0 items-center gap-2 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <Download size={15} strokeWidth={2.2} />
+                <span>Export</span>
+              </Button>
             </div>
           </div>
         </div>

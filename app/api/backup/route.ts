@@ -161,17 +161,23 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const year = Number.parseInt(request.nextUrl.searchParams.get("year") ?? "", 10);
-  if (!Number.isInteger(year) || year < 1000 || year > 9999) {
+  const scope = request.nextUrl.searchParams.get("scope") ?? "year";
+  if (scope !== "year" && scope !== "prospects") {
+    return NextResponse.json({ error: "Invalid backup scope" }, { status: 400 });
+  }
+  const includeProspects = scope === "prospects";
+  const year = includeProspects
+    ? null
+    : Number(request.nextUrl.searchParams.get("year"));
+  if (!includeProspects && (year === null || !Number.isInteger(year) || year < 1000 || year > 9999)) {
     return NextResponse.json({ error: "Missing or invalid year" }, { status: 400 });
   }
 
   const includeImages = request.nextUrl.searchParams.get("images") !== "false";
-  const includeProspects = request.nextUrl.searchParams.get("prospects") === "true";
   const { prisma } = await import("../../../lib/prisma");
 
   const [events, finds, prospects] = await Promise.all([
-    prisma.$queryRaw<EventBackupRow[]>`
+    includeProspects ? Promise.resolve<EventBackupRow[]>([]) : prisma.$queryRaw<EventBackupRow[]>`
       select
         id,
         owner_id,
@@ -195,7 +201,7 @@ export async function GET(request: NextRequest) {
         and owner_id = ${user.id}
       order by event_date asc, title asc
     `,
-    prisma.$queryRaw<FindBackupRow[]>`
+    includeProspects ? Promise.resolve<FindBackupRow[]>([]) : prisma.$queryRaw<FindBackupRow[]>`
       select
         id,
         owner_id,
@@ -239,8 +245,7 @@ export async function GET(request: NextRequest) {
             created_at,
             updated_at
           from timetravelmap.prospects
-          where extract(year from date_visited)::int = ${year}
-            and owner_id = ${user.id}
+          where owner_id = ${user.id}
           order by date_visited asc nulls last, title asc
         `
       : Promise.resolve([])
@@ -337,11 +342,12 @@ export async function GET(request: NextRequest) {
   const payload = {
     exportedAt: new Date().toISOString(),
     ownerId: user.id,
+    scope,
     year,
     includes: {
       imageMetadata: includeImages,
       imageFiles: includeImages,
-      datedProspects: includeProspects
+      prospects: includeProspects
     },
     counts: {
       events: events.length,
@@ -416,6 +422,10 @@ export async function GET(request: NextRequest) {
     }))
   };
 
+  const filename = includeProspects
+    ? "timetravelmap-prospects-backup"
+    : `timetravelmap-${year}-backup`;
+
   if (includeImages) {
     const stream = createBackupArchive(
       [...eventImages, ...findImages, ...prospectImages],
@@ -433,7 +443,7 @@ export async function GET(request: NextRequest) {
     );
     return new NextResponse(stream, {
       headers: {
-        "content-disposition": `attachment; filename="timetravelmap-${year}-backup.zip"`,
+        "content-disposition": `attachment; filename="${filename}.zip"`,
         "content-type": "application/zip",
         "cache-control": "private, no-store"
       }
@@ -442,7 +452,7 @@ export async function GET(request: NextRequest) {
 
   return new NextResponse(JSON.stringify(payload, null, 2), {
     headers: {
-      "content-disposition": `attachment; filename="timetravelmap-${year}-backup.json"`,
+      "content-disposition": `attachment; filename="${filename}.json"`,
       "content-type": "application/json; charset=utf-8",
       "cache-control": "private, no-store"
     }
