@@ -887,6 +887,13 @@ export default function TimeTravelMap({
   }, [layerDefinitions]);
 
   const beginGoogleSignIn = async () => {
+    if (!globalThis.crypto?.subtle) {
+      setAuthError(
+        "Sign in requires HTTPS. Open this site over HTTPS, or use http://localhost:3000 on the computer running the app."
+      );
+      return;
+    }
+
     setAuthPending(true);
     setAuthError("");
 

@@ -1,12 +1,15 @@
 "use client";
 
 import {
+  Archive,
   ChevronDown,
   ChevronUp,
   Database,
+  Download,
   Eye,
   EyeOff,
   GripVertical,
+  Image as ImageIcon,
   Info,
   MapPinned,
   Plus,
@@ -201,6 +204,10 @@ export default function DatasetsCard({
   const [draggedTilesetIndex, setDraggedTilesetIndex] = useState<number | null>(null);
   const [dragArmedIndex, setDragArmedIndex] = useState<number | null>(null);
   const [tilesetHelpOpen, setTilesetHelpOpen] = useState(false);
+  const [backupYear, setBackupYear] = useState<number | "">("");
+  const [backupImages, setBackupImages] = useState(true);
+  const [backupProspects, setBackupProspects] = useState(false);
+  const [backupError, setBackupError] = useState<string | null>(null);
   const yearRowRefs = useRef<Record<number, HTMLDivElement | null>>({});
   const prospectsRowRef = useRef<HTMLDivElement | null>(null);
   const normalizedQuery = searchQuery.trim().toLowerCase();
@@ -216,6 +223,14 @@ export default function DatasetsCard({
     );
     setSavedTilesetInputs(tilesets.map((tileset) => normalizeTilesetDraft(tileset)));
   }, [tilesets]);
+
+  useEffect(() => {
+    if (backupYear !== "" && years.some((yearEntry) => yearEntry.year === backupYear)) {
+      return;
+    }
+
+    setBackupYear(years[0]?.year ?? "");
+  }, [backupYear, years]);
 
   const sortEntriesByDate = <T extends { date: string | null; title: string }>(entries: T[]) =>
     [...entries].sort((left, right) => {
@@ -426,6 +441,22 @@ export default function DatasetsCard({
     } finally {
       setTilesetsSaving(false);
     }
+  };
+
+  const exportBackup = () => {
+    if (backupYear === "") {
+      setBackupError("Choose a year with data before exporting.");
+      return;
+    }
+
+    const params = new URLSearchParams({
+      year: String(backupYear),
+      images: backupImages ? "true" : "false",
+      prospects: backupProspects ? "true" : "false"
+    });
+
+    setBackupError(null);
+    window.location.assign(`/api/backup?${params.toString()}`);
   };
 
   return (
@@ -800,6 +831,90 @@ export default function DatasetsCard({
             {tilesetsError ? (
               <div className="rounded-2xl border border-[rgba(180,60,20,0.16)] bg-[rgba(255,248,244,0.92)] px-4 py-3 text-[12px] text-[#7a3e21]">
                   {tilesetsError}
+                </div>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      </Card>
+
+      <Card className="mx-auto mt-4 max-w-[1400px]">
+        <div className="border-b border-[rgba(21,49,63,0.08)] bg-gradient-to-b from-[rgba(244,248,250,0.96)] to-[rgba(237,243,246,0.96)] px-[22px] py-[20px]">
+          <div className="inline-flex items-center gap-[10px] text-[13px] font-extrabold uppercase tracking-[0.08em] text-[#15313f]">
+            <Archive size={16} strokeWidth={1.9} />
+            <span>Backup</span>
+          </div>
+        </div>
+
+        <div className="grid gap-4 p-[18px]">
+          <div className="overflow-hidden rounded-2xl border border-[rgba(21,49,63,0.08)] bg-white/70">
+            <div className="grid gap-4 px-[18px] py-4">
+              <div className="flex items-center justify-between gap-3 max-[760px]:flex-col max-[760px]:items-stretch">
+                <div>
+                  <div className="text-[14px] font-semibold text-[#15313f]">Yearly export</div>
+                </div>
+
+                <Button
+                  type="button"
+                  onClick={exportBackup}
+                  disabled={loading || backupYear === ""}
+                  className="inline-flex shrink-0 items-center gap-2 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <Download size={15} strokeWidth={2.2} />
+                  <span>Export</span>
+                </Button>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-3">
+                <label className="grid min-w-[160px] gap-1.5">
+                  <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-[#6a7d88]">Year</span>
+                  <select
+                    value={backupYear}
+                    onChange={(event) => {
+                      const year = Number.parseInt(event.currentTarget.value, 10);
+                      setBackupYear(Number.isFinite(year) ? year : "");
+                    }}
+                    disabled={loading || years.length === 0}
+                    className="rounded-xl border border-[rgba(21,49,63,0.1)] bg-white/92 px-3 py-2 text-[13px] text-[#15313f] outline-none disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {years.length === 0 ? (
+                      <option value="">No years</option>
+                    ) : (
+                      years.map((yearEntry) => (
+                        <option key={yearEntry.year} value={yearEntry.year}>
+                          {yearEntry.year}
+                        </option>
+                      ))
+                    )}
+                  </select>
+                </label>
+
+                <label className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-[rgba(21,49,63,0.08)] bg-[rgba(248,251,252,0.7)] px-3 py-2 text-[13px] font-semibold text-[#15313f]">
+                  <input
+                    type="checkbox"
+                    checked={backupImages}
+                    onChange={(event) => setBackupImages(event.currentTarget.checked)}
+                    className="h-4 w-4 accent-[#15313f]"
+                  />
+                  <ImageIcon size={15} strokeWidth={2.1} />
+                  <span>Include images</span>
+                </label>
+
+                <label className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-[rgba(21,49,63,0.08)] bg-[rgba(248,251,252,0.7)] px-3 py-2 text-[13px] font-semibold text-[#15313f]">
+                  <input
+                    type="checkbox"
+                    checked={backupProspects}
+                    onChange={(event) => setBackupProspects(event.currentTarget.checked)}
+                    className="h-4 w-4 accent-[#15313f]"
+                  />
+                  <MapPinned size={15} strokeWidth={2.1} />
+                  <span>Dated prospects</span>
+                </label>
+              </div>
+
+              {backupError ? (
+                <div className="rounded-2xl border border-[rgba(180,60,20,0.16)] bg-[rgba(255,248,244,0.92)] px-4 py-3 text-[12px] text-[#7a3e21]">
+                  {backupError}
                 </div>
               ) : null}
             </div>
