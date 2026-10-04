@@ -6,6 +6,7 @@ import {
   AuthRequiredError
 } from "../../../../lib/feature-auth";
 import { uploadImageToStorage } from "../../../../lib/image-storage";
+import { prepareImageUpload } from "../../../../lib/image-upload";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -26,12 +27,20 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Only image uploads are supported" }, { status: 400 });
     }
 
-    const bytes = Buffer.from(await file.arrayBuffer());
+    let image;
+    try {
+      image = await prepareImageUpload(Buffer.from(await file.arrayBuffer()), file.name);
+    } catch {
+      return NextResponse.json(
+        { error: "This image could not be processed. Try a JPEG, PNG, or WebP image." },
+        { status: 400 }
+      );
+    }
     const uploaded = await uploadImageToStorage({
       ownerId: user.id,
-      fileName: file.name,
-      mimeType: file.type,
-      bytes
+      fileName: image.fileName,
+      mimeType: image.mimeType,
+      bytes: image.bytes
     });
 
     const src = uploaded.publicUrl;
@@ -43,6 +52,8 @@ export async function POST(request: NextRequest) {
           storage_path,
           alt_text,
           mime_type,
+          width,
+          height,
           byte_size,
           checksum_sha256,
           source_name
@@ -51,8 +62,10 @@ export async function POST(request: NextRequest) {
           ${user.id},
           ${src},
           ${file.name || null},
-          ${file.type || null},
-          ${BigInt(bytes.byteLength)},
+          ${image.mimeType},
+          ${image.width},
+          ${image.height},
+          ${BigInt(image.bytes.byteLength)},
           ${uploaded.hash},
           ${"stack-upload"}
         )
@@ -61,6 +74,8 @@ export async function POST(request: NextRequest) {
           owner_id = excluded.owner_id,
           alt_text = excluded.alt_text,
           mime_type = excluded.mime_type,
+          width = excluded.width,
+          height = excluded.height,
           byte_size = excluded.byte_size,
           checksum_sha256 = excluded.checksum_sha256,
           source_name = excluded.source_name
