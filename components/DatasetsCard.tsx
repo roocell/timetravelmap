@@ -476,7 +476,7 @@ export default function DatasetsCard({
 
   const resizeBucketImages = async () => {
     if (bucketResizeActive.current || !window.confirm(
-      "Resize only bucket image 40807a0b2753f156f9e7ada361f49187a67f9630258b3ce91e31138e1bd1c7d8 to fit 960 x 540? Its existing file will be overwritten if larger."
+      "Resize all bucket images for your account to fit 960 x 540 while keeping their aspect ratio? Larger files will be overwritten. Images already within that size will be left unchanged."
     )) return;
 
     bucketResizeActive.current = true;
@@ -505,7 +505,7 @@ export default function DatasetsCard({
         cursor = batch.nextCursor;
       } while (cursor);
       setBucketResizeMessage(progress.total === 0
-        ? "The selected bucket image was not found for your account."
+        ? "No bucket images were found for your account."
         : `${progress.resized} resized, ${progress.skipped} already within 960 x 540, ${failures.length} failed.`);
     } catch (error) {
       setBucketResizeErrors([...failures, error instanceof Error ? error.message : "Bucket resize failed"]);
@@ -985,7 +985,7 @@ export default function DatasetsCard({
           <div className="flex flex-wrap items-center justify-between gap-4 border-t border-[rgba(21,49,63,0.08)] px-[18px] py-4">
             <div className="inline-flex items-center gap-2 text-[14px] font-semibold text-[#15313f]">
               <ImageIcon size={16} strokeWidth={2.1} />
-              <span title="40807a0b2753f156f9e7ada361f49187a67f9630258b3ce91e31138e1bd1c7d8">Bucket image 40807a0b...1bd1c7d8</span>
+              <span>All bucket images</span>
             </div>
             <Button
               type="button"

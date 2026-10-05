@@ -11,7 +11,7 @@ const target = "40807a0b2753f156f9e7ada361f49187a67f9630258b3ce91e31138e1bd1c7d8
 const state = { user: null, rows: [], objects: new Map(), uploads: [], updates: [], failUpload: null };
 const matching = where => state.rows.filter(row => row.ownerId === where.ownerId &&
   row.storagePath.startsWith(where.storagePath.startsWith) &&
-  row.storagePath.includes(where.storagePath.contains) && (!where.id || row.id > where.id.gt));
+  (!where.id || row.id > where.id.gt));
 globalThis.bucketResizeTest = {
   state,
   prisma: {
@@ -71,7 +71,7 @@ const png = (width, height) => sharp({
   create: { width, height, channels: 4, background: { r: 20, g: 180, b: 230, alpha: 0.5 } }
 }).png().toBuffer();
 
-test("resizes only the selected filename, keeps its path, and leaves all other images untouched", async () => {
+test("resizes all account bucket images across batches, keeps paths, and skips small images", async () => {
   state.user = { id: "owner-one", isRestricted: false };
   const large = await png(1920, 1080);
   const small = await png(200, 100);
@@ -82,15 +82,17 @@ test("resizes only the selected filename, keeps its path, and leaves all other i
     state.objects.set(`owner-one/${filename}.png`, index === 2 ? small : large);
   }
   state.rows.push({ id: "foreign", ownerId: "owner-two", storagePath: `${prefix}owner-two/${target}.png` });
+  state.objects.set(`owner-two/${target}.png`, large);
   state.rows.push({ id: "local", ownerId: state.user.id, storagePath: "/images/local.png" });
+  state.rows.push({ id: "other-bucket", ownerId: state.user.id, storagePath: "https://example.test/storage/v1/object/public/other-bucket/image.png" });
   const first = await (await POST(request({}))).json();
-  assert.equal(first.total, 1);
-  assert.equal(first.processed, 1);
-  assert.equal(first.resized, 1);
-  assert.equal(first.skipped, 0);
+  assert.equal(first.total, 4);
+  assert.equal(first.processed, 3);
+  assert.equal(first.resized, 2);
+  assert.equal(first.skipped, 1);
   assert.equal(first.errors.length, 0);
-  assert.equal(first.nextCursor, null);
-  assert.equal(state.uploads.length, 1);
+  assert.equal(first.nextCursor, state.rows[2].id);
+  assert.equal(state.uploads.length, 2);
   const upload = state.uploads[0];
   assert.equal(upload.objectPath, `owner-one/${target}.png`);
   assert.equal(upload.options.upsert, true);
@@ -105,14 +107,30 @@ test("resizes only the selected filename, keeps its path, and leaves all other i
   assert.equal(update.byteSize, BigInt(upload.bytes.length));
   assert.equal(update.checksumSha256, createHash("sha256").update(upload.bytes).digest("hex"));
   assert.deepEqual(state.objects.get("owner-one/other-2.png"), small);
-  assert.deepEqual(state.objects.get("owner-one/other-3.png"), large);
+  assert.notDeepEqual(state.objects.get("owner-one/other-3.png"), large);
   assert.deepEqual(state.objects.get("owner-one/other-4.png"), large);
-  assert.equal(state.updates.length, 1);
+  assert.equal(state.updates.length, 3);
+  const second = await (await POST(request({ cursor: first.nextCursor }))).json();
+  assert.equal(second.total, 4);
+  assert.equal(second.processed, 1);
+  assert.equal(second.resized, 1);
+  assert.equal(second.skipped, 0);
+  assert.equal(second.errors.length, 0);
+  assert.equal(second.nextCursor, null);
+  assert.equal(state.uploads.length, 3);
+  assert.equal(state.updates.length, 4);
+  assert.deepEqual(state.objects.get(`owner-two/${target}.png`), large);
+  assert.deepEqual(state.uploads.map(item => item.objectPath), [
+    `owner-one/${target}.png`, "owner-one/other-3.png", "owner-one/other-4.png"
+  ]);
   const retry = await (await POST(request({}))).json();
-  assert.equal(retry.skipped, 1);
+  assert.equal(retry.skipped, 3);
   assert.equal(retry.resized, 0);
   assert.equal(retry.errors.length, 0);
-  assert.equal(state.uploads.length, 1);
+  const retryLast = await (await POST(request({ cursor: retry.nextCursor }))).json();
+  assert.equal(retryLast.skipped, 1);
+  assert.equal(retryLast.nextCursor, null);
+  assert.equal(state.uploads.length, 3);
 });
 
 test("authentication, access, cursor validation, empty accounts, and missing files", async () => {
@@ -132,6 +150,27 @@ test("authentication, access, cursor validation, empty accounts, and missing fil
   const failed = await (await POST(request({}))).json();
   assert.equal(failed.errors.length, 1);
   assert.match(failed.errors[0].error, /download/);
+});
+
+test("failed images leave files and metadata untouched and do not stop later batches", async () => {
+  const invalid = Buffer.from("not an image");
+  state.objects.set("owner-one/other-3.png", invalid);
+  state.objects.set("owner-one/other-4.png", await png(1920, 1080));
+  const previousUploads = state.uploads.length;
+  const previousUpdates = state.updates.length;
+  const first = await (await POST(request({}))).json();
+  assert.equal(first.processed, 3);
+  assert.equal(first.skipped, 1);
+  assert.equal(first.errors.length, 2);
+  assert.equal(first.nextCursor, state.rows[2].id);
+  assert.equal(state.uploads.length, previousUploads);
+  assert.equal(state.updates.length, previousUpdates + 1);
+  assert.deepEqual(state.objects.get("owner-one/other-3.png"), invalid);
+  const second = await (await POST(request({ cursor: first.nextCursor }))).json();
+  assert.equal(second.resized, 1);
+  assert.equal(second.errors.length, 0);
+  assert.equal(second.nextCursor, null);
+  assert.equal(state.uploads.length, previousUploads + 1);
 });
 
 test("a native module load failure is returned as JSON without touching storage", () => {

@@ -7,7 +7,6 @@ import { IMAGE_BUCKET, getObjectPathFromStoredPath } from "../../../../lib/image
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 const BATCH_SIZE = 3;
-const TARGET_IMAGE = "40807a0b2753f156f9e7ada361f49187a67f9630258b3ce91e31138e1bd1c7d8";
 
 export async function POST(request: NextRequest) {
   try {
@@ -24,7 +23,7 @@ export async function POST(request: NextRequest) {
     const prefix = storage.getPublicUrl("").data.publicUrl;
     const where = {
       ownerId: user.id,
-      storagePath: { startsWith: prefix, contains: `/${TARGET_IMAGE}.` }
+      storagePath: { startsWith: prefix }
     };
     const [rows, total] = await Promise.all([
       prisma.image.findMany({
@@ -51,10 +50,6 @@ export async function POST(request: NextRequest) {
         const { prepareImageUpload } = await import("../../../../lib/image-upload");
         const objectPath = getObjectPathFromStoredPath(image.storagePath);
         if (!objectPath) throw new Error("Invalid bucket image path");
-        const filename = objectPath.split("/").at(-1) ?? "";
-        if (filename.replace(/\.[^.]+$/, "") !== TARGET_IMAGE) {
-          throw new Error("Image does not match the selected filename");
-        }
         const { data, error } = await storage.download(objectPath);
         if (error || !data) throw new Error("Could not download image");
         const originalBytes = Buffer.from(await data.arrayBuffer());
