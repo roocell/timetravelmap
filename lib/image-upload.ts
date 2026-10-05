@@ -15,12 +15,17 @@ export async function prepareImageUpload(bytes: Buffer, fileName: string) {
     .toFormat(outputFormat)
     .toBuffer({ resolveWithObject: true });
   const extension = outputFormat === "jpeg" ? "jpg" : outputFormat;
+  const swapped = [5, 6, 7, 8].includes(metadata.orientation ?? 1);
+  const originalWidth = swapped ? metadata.height : metadata.width;
+  const originalHeight = swapped ? metadata.width : metadata.pageHeight ?? metadata.height;
+  const height = info.pageHeight ?? info.height;
 
   return {
     bytes: data,
     fileName: `${path.parse(fileName).name || "image"}.${extension}`,
     mimeType: `image/${outputFormat}`,
     width: info.width,
-    height: info.pageHeight ?? info.height
+    height,
+    resized: info.width !== originalWidth || height !== originalHeight
   };
 }

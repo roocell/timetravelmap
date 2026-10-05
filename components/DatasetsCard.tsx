@@ -2,6 +2,8 @@
 
 import {
   Archive,
+  LoaderCircle,
+  Shrink,
   ChevronDown,
   ChevronUp,
   Database,
@@ -208,6 +210,11 @@ export default function DatasetsCard({
   const [backupImages, setBackupImages] = useState(true);
   const [prospectBackupImages, setProspectBackupImages] = useState(true);
   const [backupError, setBackupError] = useState<string | null>(null);
+  const [bucketResizeRunning, setBucketResizeRunning] = useState(false);
+  const bucketResizeActive = useRef(false);
+  const [bucketResizeProgress, setBucketResizeProgress] = useState({ total: 0, processed: 0, resized: 0, skipped: 0 });
+  const [bucketResizeMessage, setBucketResizeMessage] = useState<string | null>(null);
+  const [bucketResizeErrors, setBucketResizeErrors] = useState<string[]>([]);
   const yearRowRefs = useRef<Record<number, HTMLDivElement | null>>({});
   const prospectsRowRef = useRef<HTMLDivElement | null>(null);
   const normalizedQuery = searchQuery.trim().toLowerCase();
@@ -464,6 +471,52 @@ export default function DatasetsCard({
       images: prospectBackupImages ? "true" : "false"
     });
     window.location.assign(`/api/backup?${params.toString()}`);
+  };
+
+  const resizeBucketImages = async () => {
+    if (bucketResizeActive.current || !window.confirm(
+      "Resize only bucket image 40807a0b2753f156f9e7ada361f49187a67f9630258b3ce91e31138e1bd1c7d8 to fit 960 x 540? Its existing file will be overwritten if larger."
+    )) return;
+
+    bucketResizeActive.current = true;
+    setBucketResizeRunning(true);
+    setBucketResizeMessage(null);
+    setBucketResizeErrors([]);
+    const progress = { total: 0, processed: 0, resized: 0, skipped: 0 };
+    const failures: string[] = [];
+    setBucketResizeProgress({ ...progress });
+    let cursor: string | null = null;
+    try {
+      do {
+        const response: Response = await fetch("/api/backup/resize-images", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ cursor })
+        });
+        const batch: {
+          total: number; processed: number; resized: number; skipped: number;
+          errors: Array<{ name: string; error: string }>;
+          nextCursor: string | null; error?: string;
+        } = await response.json();
+        if (!response.ok) throw new Error(batch.error || "Bucket resize failed");
+        progress.total = batch.total;
+        progress.processed += batch.processed;
+        progress.resized += batch.resized;
+        progress.skipped += batch.skipped;
+        failures.push(...batch.errors.map((error: { name: string; error: string }) => `${error.name}: ${error.error}`));
+        setBucketResizeProgress({ ...progress });
+        setBucketResizeErrors([...failures]);
+        cursor = batch.nextCursor;
+      } while (cursor);
+      setBucketResizeMessage(progress.total === 0
+        ? "The selected bucket image was not found for your account."
+        : `${progress.resized} resized, ${progress.skipped} already within 960 x 540, ${failures.length} failed.`);
+    } catch (error) {
+      setBucketResizeErrors([...failures, error instanceof Error ? error.message : "Bucket resize failed"]);
+    } finally {
+      bucketResizeActive.current = false;
+      setBucketResizeRunning(false);
+    }
   };
 
   return (
@@ -932,6 +985,36 @@ export default function DatasetsCard({
                 <span>Export</span>
               </Button>
             </div>
+          </div>
+          <div className="flex flex-wrap items-center justify-between gap-4 border-t border-[rgba(21,49,63,0.08)] px-[18px] py-4">
+            <div className="inline-flex items-center gap-2 text-[14px] font-semibold text-[#15313f]">
+              <ImageIcon size={16} strokeWidth={2.1} />
+              <span title="40807a0b2753f156f9e7ada361f49187a67f9630258b3ce91e31138e1bd1c7d8">Bucket image 40807a0b...1bd1c7d8</span>
+            </div>
+            <Button
+              type="button"
+              onClick={resizeBucketImages}
+              disabled={loading || bucketResizeRunning}
+              className="inline-flex shrink-0 items-center gap-2 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {bucketResizeRunning ? <LoaderCircle size={15} className="animate-spin" /> : <Shrink size={15} />}
+              <span>{bucketResizeRunning ? "Resizing..." : "Resize to 960 x 540"}</span>
+            </Button>
+            {bucketResizeRunning ? (
+              <div role="status" className="grid w-full gap-2 text-[12px] text-[#60737e]">
+                <progress className="h-2 w-full accent-[#15313f]" max={bucketResizeProgress.total || 1} value={bucketResizeProgress.processed} />
+                <span>{bucketResizeProgress.processed} / {bucketResizeProgress.total} images</span>
+              </div>
+            ) : null}
+            {bucketResizeMessage ? <div role="status" className="w-full text-[12px] text-[#60737e]">{bucketResizeMessage}</div> : null}
+            {bucketResizeErrors.length ? (
+              <details className="w-full text-[12px] text-[#7a3e21]">
+                <summary>{bucketResizeErrors.length} errors</summary>
+                <ul className="mt-2 list-inside list-disc break-words">
+                  {bucketResizeErrors.map((error, index) => <li key={index}>{error}</li>)}
+                </ul>
+              </details>
+            ) : null}
           </div>
         </div>
       </Card>
