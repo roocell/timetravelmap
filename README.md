@@ -53,6 +53,9 @@ map with various historical aerial photos. use a slider to time travel.
   * Actions secret: `NEXT_PUBLIC_SUPABASE_ANON_KEY`
   * Actions secret: `NEXT_PUBLIC_STACK_PUBLISHABLE_CLIENT_KEY`
 * runtime-only secrets like `DATABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and `STACK_SECRET_SERVER_KEY` should stay configured in Coolify, not baked into the image
+* the Dockerfile builds libvips and Sharp from source for older x86-64 CPUs (including virtual machines without x86-64-v2 features); the first build takes longer, and later builds reuse the native library layer
+* use the Dockerfile build or the GHCR image in Coolify so this native build is included; changing it requires rebuilding and redeploying the image, not just restarting the container
+* image resizing is checked during the container build; to check a running container, run `node -e "require('sharp')({create:{width:2,height:2,channels:3,background:'red'}}).png().toBuffer().then(() => console.log('Sharp OK')).catch(e => {console.error(e); process.exit(1);})"` from `/app`
 
 ## recent implementation decisions
 

@@ -6,7 +6,6 @@ import {
   AuthRequiredError
 } from "../../../../lib/feature-auth";
 import { uploadImageToStorage } from "../../../../lib/image-storage";
-import { prepareImageUpload } from "../../../../lib/image-upload";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -27,10 +26,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Only image uploads are supported" }, { status: 400 });
     }
 
+    const { prepareImageUpload } = await import("../../../../lib/image-upload");
     let image;
     try {
       image = await prepareImageUpload(Buffer.from(await file.arrayBuffer()), file.name);
-    } catch {
+    } catch (error) {
+      console.error("Uploaded image processing failed", error);
       return NextResponse.json(
         { error: "This image could not be processed. Try a JPEG, PNG, or WebP image." },
         { status: 400 }
@@ -94,6 +95,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 403 });
     }
 
+    console.error("Image upload request failed", error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Failed to upload image" },
       { status: 500 }

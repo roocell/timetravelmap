@@ -22,6 +22,7 @@ import {
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "./ui/Button";
 import { Card } from "./ui/Card";
+import { readBucketResizeResponse } from "../lib/bucket-resize-response";
 
 type DatasetYear = {
   year: number;
@@ -493,12 +494,7 @@ export default function DatasetsCard({
           headers: { "content-type": "application/json" },
           body: JSON.stringify({ cursor })
         });
-        const batch: {
-          total: number; processed: number; resized: number; skipped: number;
-          errors: Array<{ name: string; error: string }>;
-          nextCursor: string | null; error?: string;
-        } = await response.json();
-        if (!response.ok) throw new Error(batch.error || "Bucket resize failed");
+        const batch = await readBucketResizeResponse(response);
         progress.total = batch.total;
         progress.processed += batch.processed;
         progress.resized += batch.resized;

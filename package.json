@@ -36,6 +36,8 @@
     "@types/archiver": "^8.0.0",
     "@types/node": "25.5.0",
     "@types/react": "^19.2.14",
+    "node-addon-api": "^8.9.2",
+    "node-gyp": "^11.5.0",
     "prisma": "^7.5.0",
     "typescript": "5.9.3"
   }

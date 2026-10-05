@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
+import { spawnSync } from "node:child_process";
 import { registerHooks } from "node:module";
 import path from "node:path";
 import { test } from "node:test";
@@ -131,4 +132,44 @@ test("authentication, access, cursor validation, empty accounts, and missing fil
   const failed = await (await POST(request({}))).json();
   assert.equal(failed.errors.length, 1);
   assert.match(failed.errors[0].error, /download/);
+});
+
+test("a native module load failure is returned as JSON without touching storage", () => {
+  const script = `
+    import assert from 'node:assert/strict';
+    import { registerHooks } from 'node:module';
+    import path from 'node:path';
+    let signedIn = false;
+    globalThis.nativeFailureUser = () => signedIn ? {id:'owner-one', isRestricted:false} : null;
+    registerHooks({
+      resolve(specifier, context, nextResolve) {
+        if (specifier === 'next/server') return nextResolve('next/server.js', context);
+        try { return nextResolve(specifier, context); }
+        catch (error) {
+          if (specifier.startsWith('.') && !path.extname(specifier)) return nextResolve(specifier + '.ts', context);
+          throw error;
+        }
+      },
+      load(url, context, nextLoad) {
+        let source;
+        if (url.endsWith('/stack.ts')) source = 'export async function getStackUser() { return globalThis.nativeFailureUser(); }';
+        if (url.endsWith('/lib/prisma.ts')) source = 'export const prisma = {image:{count:async()=>1,findMany:async()=>[{id:"target",storagePath:"${prefix}owner-one/${target}.png"}]}};';
+        if (url.endsWith('/lib/supabase/admin-client.ts')) source = 'export function getSupabaseAdminClient() {return {storage:{from:()=>({getPublicUrl:()=>({data:{publicUrl:"${prefix}"}}),download:()=>{throw new Error("Storage must not be touched");},upload:()=>{throw new Error("Storage must not be touched");}})}};}';
+        if (url.endsWith('/lib/image-upload.ts')) source = 'throw new Error("Unsupported CPU: Prebuilt binaries for linux-x64 require v2 microarchitecture");';
+        return source ? {format:'module', shortCircuit:true, source} : nextLoad(url, context);
+      }
+    });
+    const {POST} = await import(${JSON.stringify(new URL("./route.ts", import.meta.url).href)});
+    const {NextRequest} = await import('next/server.js');
+    const request = () => new NextRequest('http://localhost/api/backup/resize-images', {method:'POST',body:'{}'});
+    assert.equal((await POST(request())).status, 401);
+    signedIn = true;
+    const response = await POST(request());
+    assert.equal(response.headers.get('content-type'), 'application/json');
+    const result = await response.json();
+    assert.equal(result.resized, 0);
+    assert.match(result.errors[0].error, /Unsupported CPU/);
+  `;
+  const result = spawnSync(process.execPath, ["--input-type=module", "-e", script], { encoding: "utf8" });
+  assert.equal(result.status, 0, result.stderr);
 });

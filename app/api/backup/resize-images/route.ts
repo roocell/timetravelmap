@@ -3,7 +3,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireStackUser, AuthRequiredError, AccessDeniedError } from "../../../../lib/feature-auth";
 import { getSupabaseAdminClient } from "../../../../lib/supabase/admin-client";
 import { IMAGE_BUCKET, getObjectPathFromStoredPath } from "../../../../lib/image-storage";
-import { prepareImageUpload } from "../../../../lib/image-upload";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -49,6 +48,7 @@ export async function POST(request: NextRequest) {
 
     for (const image of images) {
       try {
+        const { prepareImageUpload } = await import("../../../../lib/image-upload");
         const objectPath = getObjectPathFromStoredPath(image.storagePath);
         if (!objectPath) throw new Error("Invalid bucket image path");
         const filename = objectPath.split("/").at(-1) ?? "";
@@ -83,6 +83,7 @@ export async function POST(request: NextRequest) {
         if (resized.resized) result.resized += 1;
         else result.skipped += 1;
       } catch (error) {
+        console.error("Bucket image resize failed", { imageId: image.id, error });
         result.errors.push({
           id: image.id,
           name: image.altText || image.id,
@@ -94,6 +95,9 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(result, { headers: { "cache-control": "private, no-store" } });
   } catch (error) {
+    if (!(error instanceof AuthRequiredError) && !(error instanceof AccessDeniedError)) {
+      console.error("Bucket resize request failed", error);
+    }
     const status = error instanceof AuthRequiredError ? 401 : error instanceof AccessDeniedError ? 403 : 500;
     return NextResponse.json({ error: error instanceof Error ? error.message : "Bucket resize failed" }, { status });
   }
